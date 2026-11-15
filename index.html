@@ -218,7 +218,7 @@ button, input, textarea { font-family: inherit; }
   <div class="modal-sheet">
     <button class="modal-close" onclick="closeBackupModal()">×</button>
     <div class="modal-title">自動バックアップから戻す</div>
-    <div class="modal-sub">その日の最初に開いたときの状態を、7日分この端末に残しています。戻すと、メモの内容がバックアップの時点に書き戻ります（そのあとに追加したメモは残ります。削除したメモは戻りません）。</div>
+    <div class="modal-sub">メモの内容が変わった日の、最初に開いたときの状態を、新しい順に5つまでこの端末に残しています（読み込みの直前の状態も含みます）。戻すと、メモの内容がバックアップの時点に書き戻ります（そのあとに追加したメモは残ります。削除したメモは戻りません）。</div>
     <div id="backup-list"></div>
   </div>
 </div>
@@ -259,7 +259,7 @@ const FORMATS = ['Zoom', '対面', '動画', 'その他'];
 const SYNC_LISTS = ['memos', 'categories'];   // GASと同期する一覧（どちらも id 単位でマージする）
 const TEXT_FIELDS = ['title', 'course', 'content', 'reaction', 'next', 'link'];
 const RESYNC_MIN_INTERVAL_MS = 60000;         // 受信し直しの最短間隔
-const BACKUP_KEEP_DAYS = 7;
+const BACKUP_KEEP = 5;                        // 端末内に残す自動バックアップの数
 
 // ── 画面の状態 ──
 let _formOpen = false;       // 「くわしく書く」フォームを開いている
@@ -767,15 +767,26 @@ function _writeBackup(name) {
   try { return lsSet('backup_' + name, JSON.stringify(_exportObject())); }
   catch (e) { console.error('[バックアップ失敗] ' + name, e); return false; }
 }
-// その日の最初の起動時だけ作る（2回目以降は上書きしない。データがおかしくなってから
-// 開き直しても、その日の朝の状態が残る）。7日より古いものは消す
+// 自動バックアップ：その日の最初の起動時に作る（同じ日の2回目以降は上書きしない。データがおかしく
+// なってから開き直しても、その日の朝の状態が残る）。
+// ・メモが1件も無いとき、直近のバックアップと中身が同じときは作らない
+// ・残すのは新しい順に BACKUP_KEEP 個まで（読み込み前・戻す前のバックアップも数に含む）
+// ★ 数を抑えているのは、健康アプリと保存容量（約5MB）を共有しているため。
+function _backupContent(o) {
+  return _stableStr({ m: (o && o.memos) || [], c: (o && o.categories) || [], d: (o && o.deletedIds) || {} });
+}
 function autoBackup() {
   const today = todayKey();
-  if (lsGet('backup_' + today) === null) _writeBackup(today);
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - BACKUP_KEEP_DAYS);
-  const cutoffStr = cutoff.getFullYear() + '-' + String(cutoff.getMonth() + 1).padStart(2, '0') + '-' + String(cutoff.getDate()).padStart(2, '0');
-  _backupNames().forEach(n => { if (n.slice(0, 10) < cutoffStr) lsDel('backup_' + n); });
+  if (lsGet('backup_' + today) === null && getMemos().length > 0) {
+    const names = _backupNames();
+    const latest = names.length ? load('backup_' + names[names.length - 1], null) : null;
+    if (!latest || _backupContent(latest) !== _backupContent(_exportObject())) _writeBackup(today);
+  }
+  _pruneBackups();
+}
+function _pruneBackups() {
+  const names = _backupNames();
+  names.slice(0, Math.max(0, names.length - BACKUP_KEEP)).forEach(n => lsDel('backup_' + n));
 }
 function _hhmm() {
   const d = new Date();
@@ -834,6 +845,7 @@ async function _runImport(d, backupLabel) {
     showToast('取り込み前のバックアップを作れなかったため、中止しました');
     return null;
   }
+  _pruneBackups();
   let result;
   _importing = true;
   try {
