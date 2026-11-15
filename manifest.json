@@ -1,0 +1,13 @@
+{
+  "name": "あおの学びメモ",
+  "short_name": "学びメモ",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "icon_192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon_512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

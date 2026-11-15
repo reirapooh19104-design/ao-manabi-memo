@@ -1,0 +1,12 @@
+# 書き出したバックアップ（GitHubには上げない）
+ao-manabi-memo-*.json
+バックアップ/
+
+# macOS が自動生成するファイル
+.DS_Store
+
+# 作業メモ（ローカル保管のみ）
+_worknotes/
+
+# 仮ゴミ箱（移動のみ・本削除は手動でMacのゴミ箱経由）
+_trash/

@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>あおの学びメモ</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="学びメモ">
+<link rel="apple-touch-icon" href="icon_192.png">
+<link rel="icon" href="icon_192.png" type="image/png">
+<style>
+:root {
+  --pink: #D4537E;
+  --pink-light: #F4C0D1;
+  --pink-pale: #FBEAF0;
+  --bg: #F5F4F0;
+  --card: #FFFFFF;
+  --text: #333333;
+  --text-light: #888888;
+  --border: #E5E4E0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  background: var(--bg); color: var(--text);
+  max-width: 600px; margin: 0 auto; min-height: 100vh;
+}
+button, input, textarea { font-family: inherit; }
+.header {
+  background: var(--card); padding: 12px 16px; display: flex; align-items: center; gap: 12px;
+  position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--border);
+}
+.header-icon { width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; }
+.header-info h1 { font-size: 17px; font-weight: 700; }
+#sync-status { font-size: 11px; min-height: 14px; color: var(--text-light); transition: color 0.3s; }
+#sync-status.syncing { color: var(--pink); }
+#sync-status.error { color: #e74c3c; }
+.header-menu { margin-left: auto; font-size: 20px; cursor: pointer; color: var(--text-light); background: none; border: none; padding: 6px 8px; border-radius: 8px; }
+.header-menu:hover { background: var(--pink-pale); }
+#maintenance-banner { display: none; background: #F59E0B; color: #fff; font-size: 12.5px; font-weight: 700; padding: 8px 14px; text-align: center; }
+.main { padding: 14px 14px 40px; }
+.setup-hint { background: #FFF8E1; border: 1px solid #F5DFA0; border-radius: 10px; padding: 10px 13px; font-size: 12.5px; color: #7A5C00; margin-bottom: 14px; line-height: 1.6; }
+.setup-hint button { background: none; border: none; color: var(--pink); font-weight: 700; font-size: 12.5px; cursor: pointer; text-decoration: underline; padding: 0; }
+
+.summary { background: var(--card); border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding: 12px 15px; margin-bottom: 14px; }
+.summary .stitle { font-size: 12px; color: var(--pink); font-weight: 700; margin-bottom: 8px; }
+.summary .srow { display: flex; flex-wrap: wrap; gap: 8px; }
+.spill { font-size: 12px; padding: 4px 11px; border-radius: 14px; color: var(--text); font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+.spill b { font-weight: 800; }
+.sempty { font-size: 12px; color: var(--text-light); }
+
+.quick-card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding: 14px 15px; margin-bottom: 12px; }
+.quick-title { font-size: 14px; color: var(--pink); font-weight: 700; margin-bottom: 3px; }
+.quick-sub { font-size: 11.5px; color: var(--text-light); margin-bottom: 10px; }
+.quick-card input[type="date"] { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 16px; color: var(--text); background: #fff; margin-bottom: 10px; }
+.quick-save { width: 100%; background: var(--pink); color: #fff; border: none; border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 12px; }
+.quick-save.off { background: var(--pink-light); }
+
+.new-trigger { width: 100%; background: #fff; color: var(--pink); border: 1.5px solid var(--pink-light); border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 700; cursor: pointer; margin-bottom: 16px; }
+.add-card { background: var(--card); border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding: 16px; margin-bottom: 20px; }
+.add-card h2 { font-size: 14px; color: var(--pink); margin-bottom: 14px; }
+.field { margin-bottom: 12px; }
+.field label { display: block; font-size: 12px; color: var(--text-light); margin-bottom: 4px; font-weight: 600; }
+.field input[type="text"], .field input[type="date"], .field input[type="url"], .field textarea {
+  width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 16px; color: var(--text); background: #fff;
+}
+.field textarea { resize: vertical; min-height: 70px; line-height: 1.5; }
+.cat-picker { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cat-chip { border: 1.5px solid var(--border); background: #fff; border-radius: 20px; padding: 6px 13px; font-size: 13px; cursor: pointer; color: var(--text-light); }
+.cat-chip.selected { color: var(--text); border-color: transparent; font-weight: 700; }
+.cat-chip.add-cat { border-style: dashed; color: var(--pink); border-color: var(--pink-light); }
+.seg { display: flex; gap: 6px; }
+.seg button { flex: 1; border: 1.5px solid var(--border); background: #fff; border-radius: 8px; padding: 8px 4px; font-size: 12px; cursor: pointer; color: var(--text-light); }
+.seg button.on { background: var(--pink-pale); border-color: var(--pink-light); color: var(--pink); font-weight: 700; }
+.field .hint { font-size: 11px; color: var(--text-light); margin-top: 4px; }
+.save-btn { width: 100%; background: var(--pink); color: #fff; border: none; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 4px; }
+.cancel-btn { width: 100%; background: none; color: var(--text-light); border: none; padding: 10px; font-size: 13px; cursor: pointer; margin-top: 4px; }
+
+.filter-bar { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.filter-bar .flabel { font-size: 11px; color: var(--text-light); }
+.filter-chip { border: 1px solid var(--border); background: #fff; border-radius: 16px; padding: 5px 12px; font-size: 12px; cursor: pointer; color: var(--text-light); }
+.filter-chip.on { background: var(--pink); color: #fff; border-color: transparent; font-weight: 700; }
+.filter-chip.stub-chip { border-style: dashed; }
+
+.month-group { margin-bottom: 12px; }
+.month-head { display: flex; align-items: center; gap: 8px; width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 11px 14px; cursor: pointer; font-size: 14px; color: var(--text); font-weight: 700; }
+.month-head .arrow { transition: transform .2s; color: var(--pink); font-size: 12px; }
+.month-head.open .arrow { transform: rotate(90deg); }
+.month-head .count { margin-left: auto; font-size: 11px; color: var(--text-light); font-weight: 400; }
+.month-body { display: none; padding-top: 10px; }
+.month-body.open { display: block; }
+
+.memo { background: var(--card); border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); padding: 14px 15px; margin-bottom: 11px; border-left: 4px solid var(--lm-solid, var(--pink-light)); position: relative; }
+.memo.stub { background: #FCFBF9; border: 1.5px dashed var(--border); border-left: 4px solid var(--lm-solid, var(--pink-light)); box-shadow: none; padding: 11px 15px; }
+.memo-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; padding-right: 30px; }
+.memo.stub .memo-top { margin-bottom: 8px; }
+.memo-cat { font-size: 11px; font-weight: 700; color: var(--text); padding: 2px 9px; border-radius: 12px; background: var(--lm-fill, #F0EDE8); }
+.memo-date { font-size: 12px; color: var(--text-light); }
+.stub-badge { font-size: 10.5px; color: var(--text-light); border: 1px dashed #C9C6BE; border-radius: 10px; padding: 1px 8px; }
+.stub-add { background: none; border: none; color: var(--pink); font-size: 13px; font-weight: 700; cursor: pointer; padding: 2px 0; }
+.memo-mastery { margin-left: auto; font-size: 10.5px; padding: 2px 9px; border-radius: 10px; font-weight: 700; background: var(--lm-fill, #F0EDE8); color: var(--text); display: inline-flex; align-items: center; gap: 5px; }
+.dots { display: inline-flex; gap: 2px; }
+.dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--lm-solid, var(--text-light)); opacity: .28; display: block; }
+.dots i.on { opacity: 1; }
+.memo-title { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+.memo-teacher { font-size: 12px; color: var(--text-light); margin-bottom: 9px; }
+.memo-teacher .fmt { display: inline-block; margin-left: 8px; padding: 1px 7px; background: var(--pink-pale); border-radius: 8px; color: var(--pink); font-size: 10.5px; }
+.memo-teacher .fmt:first-child { margin-left: 0; }
+.memo-block { margin-bottom: 8px; }
+.memo-block .blabel { font-size: 11px; color: var(--lm-solid, var(--pink)); font-weight: 700; margin-bottom: 1px; }
+.memo-block .btext { font-size: 13px; color: var(--text); white-space: pre-wrap; word-break: break-word; line-height: 1.6; }
+.memo-block .btext.ao { background: var(--lm-fill, #F0EDE8); border-radius: 8px; padding: 6px 9px; }
+.memo-block.next .blabel::before { content: "🔖 "; }
+.memo-block.next .btext { background: #fffdf5; border: 1px dashed var(--lm-solid, var(--text-light)); border-radius: 8px; padding: 6px 9px; }
+.memo-link a { font-size: 12px; color: var(--pink); text-decoration: none; word-break: break-all; }
+.kebab { position: absolute; top: 8px; right: 8px; background: none; border: none; cursor: pointer; font-size: 18px; color: var(--text-light); line-height: 1; padding: 6px 9px; border-radius: 6px; }
+.kebab:hover { background: var(--pink-pale); }
+.memo-menu { display: none; position: absolute; top: 38px; right: 10px; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.12); overflow: hidden; z-index: 5; }
+.memo-menu.open { display: block; }
+.memo-menu button { display: block; width: 100%; text-align: left; background: none; border: none; padding: 11px 20px 11px 14px; font-size: 13px; color: var(--text); cursor: pointer; }
+.memo-menu button:hover { background: var(--bg); }
+.memo-menu button.del { color: #d05c5c; }
+.empty-list { text-align: center; color: var(--text-light); font-size: 13px; padding: 20px 0; }
+
+.footer { text-align: center; font-size: 12px; color: var(--text-light); padding: 18px 0 0; }
+.footer a { color: var(--pink); text-decoration: none; }
+
+.toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: rgba(40,40,40,0.9); color: white; padding: 11px 22px; border-radius: 24px; font-size: 13.5px; z-index: 9999; opacity: 0; transition: opacity 0.25s; pointer-events: none; max-width: 92vw; text-align: center; }
+.toast.show { opacity: 1; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; }
+.modal-sheet { background: #fff; width: 100%; max-width: 600px; max-height: 92vh; overflow-y: auto; border-radius: 18px 18px 0 0; padding: 22px 18px 26px; position: relative; }
+.modal-close { position: absolute; top: 10px; right: 12px; background: none; border: none; font-size: 24px; color: var(--text-light); cursor: pointer; padding: 4px 8px; }
+.modal-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+.modal-h { font-size: 13px; font-weight: 700; color: var(--pink); margin: 4px 0 6px; }
+.modal-sub { font-size: 12.5px; color: var(--text-light); margin-bottom: 10px; line-height: 1.6; }
+.form-input { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 16px; color: var(--text); background: #fff; }
+.btn-primary { background: var(--pink); color: #fff; border: none; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 700; cursor: pointer; width: 100%; }
+.btn-secondary { background: #fff; color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 11px; font-size: 13.5px; cursor: pointer; width: 100%; }
+.modal-hr { margin: 16px 0; border: none; border-top: 1px solid #eee; }
+.backup-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+.backup-item-date { font-size: 13.5px; font-weight: 600; word-break: break-all; }
+.backup-item-info { font-size: 11.5px; color: var(--text-light); }
+.btn-restore { margin-left: auto; flex-shrink: 0; background: #fff; border: 1px solid var(--pink-light); color: var(--pink); border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 700; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <img class="header-icon" src="icon_192.png" alt="">
+  <div class="header-info">
+    <h1>あおの学びメモ</h1>
+    <div id="sync-status"></div>
+  </div>
+  <button class="header-menu" onclick="showSettingsModal()" aria-label="設定">⚙️</button>
+</div>
+<div id="maintenance-banner">⚠️ メンテナンスモード中（自動の受信を止めています）</div>
+
+<div class="main">
+  <div id="setup-hint"></div>
+  <div id="summary"></div>
+  <div id="quick-container"></div>
+  <button class="new-trigger" id="new-trigger" onclick="toggleForm()">✏️ くわしく書く（新しい学びメモ）</button>
+  <div id="form-container"></div>
+  <div id="filter-bar"></div>
+  <div id="memo-list"></div>
+  <div class="footer">
+    <a href="https://reirapooh19104-design.github.io/ao-health-management-sp/">あお健康管理を開く ›</a>
+  </div>
+</div>
+
+<!-- 設定モーダル -->
+<div id="settings-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSettingsModal()">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="closeSettingsModal()">×</button>
+    <div class="modal-title">設定・バックアップ</div>
+
+    <div class="modal-h">同期の設定</div>
+    <div class="modal-sub">学びメモ用の GAS ウェブアプリの URL と、GAS 側に設定した合言葉（SYNC_TOKEN）を入力してください。健康アプリのものとは別です。</div>
+    <!-- formで囲むのは、Chromeが合言葉欄をログイン画面と誤認して他の入力欄に候補を出すのを防ぐため。
+         送信の動きは持たせない（保存は form の外のボタンから） -->
+    <form autocomplete="off" onsubmit="return false">
+      <input id="gas-url-input" type="url" class="form-input" autocomplete="off"
+        placeholder="https://script.google.com/macros/s/..." style="margin-bottom:10px">
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <input id="sync-token-input" type="password" class="form-input" autocomplete="new-password" placeholder="合言葉" style="flex:1">
+        <button type="button" id="sync-token-toggle-btn" class="btn-secondary" style="width:auto;flex-shrink:0;padding:0 14px" onclick="toggleSyncTokenVisibility()">表示</button>
+      </div>
+      <div id="settings-error" style="color:#c0392b;font-size:13px;margin-bottom:8px;display:none"></div>
+    </form>
+    <button class="btn-primary" onclick="saveSettingsFromModal()">保存して同期する</button>
+
+    <hr class="modal-hr">
+    <div class="modal-h">全データGAS同期</div>
+    <div class="modal-sub">この端末のデータを、そのまま GAS に送って上書きします。ふだんは押す必要はありません（保存のたびに自動で送られます）。</div>
+    <button class="btn-secondary" onclick="pushAllToCloud()">全データGAS同期</button>
+
+    <hr class="modal-hr">
+    <div class="modal-h">バックアップ</div>
+    <div class="modal-sub">書き出したファイルには、GAS の URL と合言葉は入りません。</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn-secondary" onclick="exportData()">書き出し</button>
+      <button class="btn-secondary" onclick="document.getElementById('import-file').click()">読み込み</button>
+    </div>
+    <input id="import-file" type="file" accept=".json,application/json" style="display:none" onchange="importData(event)">
+    <button class="btn-secondary" onclick="showBackupModal()">自動バックアップから戻す</button>
+
+    <hr class="modal-hr">
+    <div class="modal-sub">データを直す作業のあいだ、自動の受信（起動時・画面に戻ったとき）だけを一時的に止められます。終わったら必ず OFF に戻してください。</div>
+    <button id="maintenance-toggle-btn" class="btn-secondary" onclick="toggleMaintenanceMode()">メンテナンスモード：OFF（タップでONにする）</button>
+  </div>
+</div>
+
+<!-- 自動バックアップのモーダル -->
+<div id="backup-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeBackupModal()">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="closeBackupModal()">×</button>
+    <div class="modal-title">自動バックアップから戻す</div>
+    <div class="modal-sub">その日の最初に開いたときの状態を、7日分この端末に残しています。戻すと、メモの内容がバックアップの時点に書き戻ります（そのあとに追加したメモは残ります。削除したメモは戻りません）。</div>
+    <div id="backup-list"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+'use strict';
+// ============================================================
+// あおの学びメモ
+// 同期の仕組みは健康アプリ（ao-health-management-sp）で作って検証したものを引き継いでいる。
+// 仕様と落とし穴は CLAUDE.md を参照。
+// ============================================================
+
+const APP_ID = 'ao-manabi-memo';   // 書き出しファイルの目印
+const EXPORT_VER = 1;
+
+// ★ 端末内の保存キーには、必ずこの前置きを付ける。
+//   このアプリと健康アプリは同じ住所（～.github.io）で公開されるため、端末内の保存場所（localStorage）を
+//   共有している。前置きが無いと gas_url・sync_token・deleted_ids などが健康アプリのものと衝突する。
+//   「custom_」で始めているのは、健康アプリが以前から custom_ で始まるキーを同期の送信・受信の対象外に
+//   しているため（健康アプリの古い版が端末に残っていても、学びメモのデータが健康アプリのGASへ流れない）。
+const LS = 'custom_manabi_';
+
+// カテゴリの色（淡い塗り＋濃い色の組）。先頭3つは初期カテゴリの色
+const PALETTE = [
+  { fill: 'rgba(120,205,190,0.28)', solid: '#6cbfae' },  // 緑（筋トレ）
+  { fill: 'rgba(240,180,100,0.28)', solid: '#dda558' },  // 橙（マッサージ）
+  { fill: 'rgba(180,140,220,0.26)', solid: '#a986cf' },  // 紫（プレイズタッチ）
+  { fill: 'rgba(150,180,220,0.28)', solid: '#7d9fd3' },  // 青
+  { fill: 'rgba(240,150,170,0.26)', solid: '#e08ba3' },  // ピンク
+  { fill: 'rgba(120,200,220,0.26)', solid: '#67b7c9' },  // 水色
+  { fill: 'rgba(200,200,120,0.30)', solid: '#a8a45c' },  // 黄緑
+  { fill: 'rgba(220,160,120,0.28)', solid: '#c98f66' },  // ブラウン
+];
+const MASTERY_LABELS = ['習いたて', '練習中', 'できた', '定着した'];  // mastery 1〜4（0＝未設定）
+const FORMATS = ['Zoom', '対面', '動画', 'その他'];
+const SYNC_LISTS = ['memos', 'categories'];   // GASと同期する一覧（どちらも id 単位でマージする）
+const TEXT_FIELDS = ['title', 'course', 'content', 'reaction', 'next', 'link'];
+const RESYNC_MIN_INTERVAL_MS = 60000;         // 受信し直しの最短間隔
+const BACKUP_KEEP_DAYS = 7;
+
+// ── 画面の状態 ──
+let _formOpen = false;       // 「くわしく書く」フォームを開いている
+let _formCat = null, _formFormat = 'Zoom', _formMastery = 1;
+let _editId = null;          // カード内で編集中のメモid
+let _editCat = null, _editFormat = '', _editMastery = 0;
+let _menuOpenId = null;      // ⋯メニューを開いているメモid
+let _filterCat = null;       // 絞り込み中のカテゴリid（null＝すべて）
+let _filterStub = false;     // 「日付だけ」の記録だけを表示
+let _monthOpen = {};         // 'YYYY-MM' → 開閉（利用者が操作した月だけ。既定は最新の月だけ開く）
+let _quickCat = null;        // 「日付だけ記録」で選んでいるカテゴリid
+let _quickDate = null;       // 「日付だけ記録」の日付（null＝今日に追従）
+// ── 同期の状態 ──
+let _importing = false;        // 読み込み中は個別の送信を止め、最後に全データ送信1回にまとめる
+let _syncInFlight = false;     // 受信同期の実行中（多重実行防止）
+let _lastSyncAt = 0;           // 直近の受信同期を始めた時刻
+let _pushAllInFlight = false;  // 全データGAS同期の実行中（連打防止）
+let _renderDeferTimer = null;  // 編集中のため後回しにした再描画の見張り
+let _lastRenderDay = null;     // 最後に画面を描いた日（日付またぎの検出用）
+let _tt = null;
+
+// ============================================================
+// 小さな道具
+// ============================================================
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function escHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+// ボタンに値を埋め込むときは必ずこれを使う： onclick="fn(${_jsq(id)})"（前後に ' を付けない）。
+// 値を JS の文字列（"…" つき）にしてから HTML 用に変換するので、同期で受け取った値に
+// 引用符や < > が含まれていても、属性やスクリプトを抜け出せない。
+function _jsq(v) {
+  return escHtml(JSON.stringify(String(v === undefined || v === null ? '' : v)));
+}
+// 色の値として安全な形（#xxxxxx / rgb() / rgba()）だけを通す。同期で受け取った値を style に入れるため
+function _safeColor(c, fallback) {
+  const s = String(c || '');
+  return (/^#[0-9a-fA-F]{3,8}$/.test(s) || /^rgba?\([0-9\s.,%]+\)$/.test(s)) ? s : fallback;
+}
+function _newId(prefix) {
+  return prefix + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+}
+function _isDateStr(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+function _monthLabel(ym) {   // 'YYYY-MM' → '2026年7月'
+  const p = String(ym).split('-');
+  return p.length === 2 ? p[0] + '年' + Number(p[1]) + '月' : '日付なし';
+}
+function _dateLabel(dateStr) {   // 'YYYY-MM-DD' → '7月3日'
+  const p = String(dateStr).split('-');
+  if (p.length !== 3) return String(dateStr);
+  return Number(p[1]) + '月' + Number(p[2]) + '日';
+}
+// 中身の比較用：キーの並び順に左右されない文字列にする
+function _stableStr(v) {
+  if (Array.isArray(v)) return '[' + v.map(_stableStr).join(',') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + _stableStr(v[k])).join(',') + '}';
+  return JSON.stringify(v === undefined ? null : v);
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(_tt); _tt = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ============================================================
+// 端末内の保存（localStorage）
+// ============================================================
+function lsGet(k) { try { return localStorage.getItem(LS + k); } catch (e) { return null; } }
+function lsDel(k) { try { localStorage.removeItem(LS + k); } catch (e) {} }
+function _backupNames() {
+  const names = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(LS + 'backup_')) names.push(k.slice((LS + 'backup_').length));
+  }
+  return names.sort();
+}
+// 古い自動バックアップを1つ消して空きを作る（最新の2つは残す）。消せたら true
+function _freeOldestBackup() {
+  const names = _backupNames();
+  if (names.length <= 2) return false;
+  lsDel('backup_' + names[0]);
+  return true;
+}
+// 保存を試み、失敗したら古い自動バックアップを消しながらやり直す。保存できたら true
+function lsSet(k, str) {
+  for (;;) {
+    try { localStorage.setItem(LS + k, str); return true; }
+    catch (e) {
+      if (!_freeOldestBackup()) { console.error('[保存失敗] ' + k, e); return false; }
+    }
+  }
+}
+function load(key, def) {
+  try { const v = lsGet(key); return v ? JSON.parse(v) : def; } catch (e) { return def; }
+}
+// 保存できなかったことを、消えない帯で知らせる（すぐ消える通知では埋もれるため）
+function _showStorageError() {
+  let el = document.getElementById('storage-error-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'storage-error-banner';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2000;background:#B71C1C;color:#fff;font-size:13px;line-height:1.5;padding:10px 40px 10px 12px';
+    el.innerHTML = '⚠️ 保存できませんでした。端末の保存領域がいっぱいの可能性があります。いまの入力は記録されていません。'
+      + '<button onclick="this.parentNode.style.display=\'none\'" style="position:absolute;top:6px;right:8px;background:none;border:none;color:#fff;font-size:18px;cursor:pointer">✕</button>';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'block';
+}
+// 端末に保存し、時刻を刻み、GASへ送る。保存できたら true。
+// ★ 起動時の準備（初期データ作りなど）からは呼ばないこと（空や初期の一覧が「最新」としてGASへ送られる）。
+function save(key, val) {
+  const ts = Date.now();
+  if (!lsSet(key, JSON.stringify(val)) || !lsSet('ts_' + key, String(ts))) {
+    // 端末に保存できなかった。GASへも送らない（端末とGASで食い違うより、何も変えない方が安全）
+    _showStorageError();
+    return false;
+  }
+  pushPairToCloud(key, val, ts);
+  return true;
+}
+
+// 一覧の最低ライン：「空でない文字列の id を持つオブジェクト」だけを通す。
+// null や id の無い要素が1つでも混ざると、マージや描画の途中で止まるため。
+function _isSaneEntry(e) {
+  return !!e && typeof e === 'object' && !Array.isArray(e) && typeof e.id === 'string' && e.id !== '' && e.id !== 'undefined';
+}
+function _saneList(arr, label) {
+  if (!Array.isArray(arr)) return [];
+  const ok = arr.filter(_isSaneEntry);
+  if (label && ok.length !== arr.length) {
+    console.warn('[整合チェック] ' + label + ': ' + (arr.length - ok.length) + ' 件（id の無い要素など）を対象から外しました');
+  }
+  return ok;
+}
+function getMemos() { return _saneList(load('memos', [])); }
+function setMemos(arr) { return save('memos', arr); }
+function getCategories() { return _saneList(load('categories', [])); }
+function setCategories(arr) { return save('categories', arr); }
+
+// 初期カテゴリ（保存データが無い最初の1回だけ）。
+// ・id を固定にしているので、複数の端末が別々に作っても同期で重複しない
+// ・save() は使わず、時刻0で端末内だけに保存する（送信しない）。時刻0なので、GASに同じ id の
+//   カテゴリがあれば必ずGAS側が勝つ（まっさらな端末の初期データが本物を上書きしない）
+function seedCategories() {
+  if (lsGet('categories') !== null) return;
+  lsSet('categories', JSON.stringify([
+    { id: 'lcat_kintore', label: '筋トレ',         fill: PALETTE[0].fill, solid: PALETTE[0].solid, _ts: 0, order: 1 },
+    { id: 'lcat_massage', label: 'マッサージ',     fill: PALETTE[1].fill, solid: PALETTE[1].solid, _ts: 0, order: 2 },
+    { id: 'lcat_praise',  label: 'プレイズタッチ', fill: PALETTE[2].fill, solid: PALETTE[2].solid, _ts: 0, order: 3 },
+  ]));
+}
+
+// ============================================================
+// 同期（Google Apps Script）
+// ============================================================
+function getGasUrl() { return lsGet('gas_url') || ''; }
+function getSyncToken() { return lsGet('sync_token') || ''; }
+function _syncReady() { return !!getGasUrl() && !!getSyncToken(); }
+
+function isMaintenanceMode() { return lsGet('maintenance_mode') === 'on'; }
+function setMaintenanceMode(on) {
+  if (on) lsSet('maintenance_mode', 'on'); else lsDel('maintenance_mode');
+  renderMaintenanceBanner();
+}
+function toggleMaintenanceMode() { setMaintenanceMode(!isMaintenanceMode()); }
+function renderMaintenanceBanner() {
+  const on = isMaintenanceMode();
+  const banner = document.getElementById('maintenance-banner');
+  if (banner) banner.style.display = on ? 'block' : 'none';
+  const btn = document.getElementById('maintenance-toggle-btn');
+  if (btn) btn.textContent = on ? 'メンテナンスモード：ON（タップでOFFにする）' : 'メンテナンスモード：OFF（タップでONにする）';
+}
+
+function _syncStatus(msg, type) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = type || '';
+}
+
+// 個別の送信の応答をコンソールに記録する（観察用・再送はしない）。
+// 応答が読めなかった場合（resBody=null）は何も出さない：GASは応答を返す前に書き込みを終えているため、
+// 「応答を受け取れなかった＝書き込めなかった」ではない。届かなかった分は次の受信同期の書き戻しで拾う。
+function _logPushResult(label, key, resBody) {
+  if (!resBody) return;
+  if (resBody.status === 'error') {
+    if (resBody.message === 'busy') console.warn('[混雑] ' + label + ' key=' + key + '：GASが混み合っています');
+    else if (resBody.message === 'unauthorized') console.warn('[認証エラー] ' + label + ' key=' + key + '：合言葉を確認してください');
+    else console.warn('[GASエラー] ' + label + ' key=' + key + '：GAS側でエラーが起き、保存されませんでした（' + resBody.message + '）');
+  } else if (Array.isArray(resBody.skipped) && resBody.skipped.length > 0) {
+    console.warn('[見送り] ' + label + '：GASにより新しいデータがあるため書き込まれませんでした: ' + resBody.skipped.join(', '));
+  }
+}
+async function _post(payload) {
+  const res = await fetch(getGasUrl(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(Object.assign({}, payload, { token: getSyncToken() })),
+    cache: 'no-store'
+  });
+  return { res, body: await res.json().catch(() => null) };
+}
+// 本体と時刻（_ts_）を1回の送信にまとめて送る。別々に送ると、片方だけ届かなかったときに
+// 「時刻だけ新しく、本体は古い」食い違いが起きるため。
+// 時刻は呼び出し元（save）が端末に刻んだものをそのまま渡す（ここでは刻まない）。
+async function pushPairToCloud(key, val, ts) {
+  if (_importing) return;   // 読み込み中は送らない（終わったあとの全データ送信にまとめる）
+  if (!_syncReady()) return;
+  try {
+    const r = await _post({ bulk: true, data: { [key]: val, ['_ts_' + key]: ts } });
+    _logPushResult('pushPairToCloud', key, r.body);
+  } catch (e) { console.error('[push失敗] pushPairToCloud key=' + key, e); }
+}
+// 複数のキーを1回の送信にまとめて送る（時刻なし＝GAS側の新旧チェックを通さない。書き戻し・削除記録用）
+async function pushBulkToCloud(data) {
+  if (_importing) return;
+  if (!_syncReady()) return;
+  try {
+    const r = await _post({ bulk: true, data: data });
+    _logPushResult('pushBulkToCloud', Object.keys(data).join(','), r.body);
+  } catch (e) { console.error('[push失敗] pushBulkToCloud', e); }
+}
+
+// ── 削除記録（tombstone） ──
+// 形：{ memos: [id…], categories: [id…] }。削除したidは二度と使わない（同じidで作り直すと、
+// 削除記録に弾かれて同期で消える）。GAS側は削除記録を合算して保存する（減らない）。
+function getDeletedIds() {
+  const d = load('deleted_ids', {});
+  return (d && typeof d === 'object' && !Array.isArray(d)) ? d : {};
+}
+function _isDeleted(keyName, id) {
+  const ids = getDeletedIds()[keyName];
+  return Array.isArray(ids) && ids.includes(String(id));
+}
+// 削除記録に入れて送る。空・未定義のidは入れない（別の項目を巻き込むため）。保存できたら true
+function addDeletedIds(keyName, idList) {
+  const d = getDeletedIds();
+  if (!Array.isArray(d[keyName])) d[keyName] = [];
+  let changed = false;
+  (idList || []).forEach(id => {
+    if (id === undefined || id === null || id === '') return;
+    const sid = String(id);
+    if (sid === 'undefined' || d[keyName].includes(sid)) return;
+    d[keyName].push(sid);
+    changed = true;
+  });
+  if (!changed) return true;
+  if (!lsSet('deleted_ids', JSON.stringify(d))) { _showStorageError(); return false; }
+  pushBulkToCloud({ deleted_ids: d });
+  return true;
+}
+function mergeDeletedIds(remote) {
+  const merged = getDeletedIds();
+  let changed = false;
+  if (remote && typeof remote === 'object' && !Array.isArray(remote)) {
+    Object.keys(remote).forEach(cat => {
+      if (!Array.isArray(remote[cat])) return;
+      if (!Array.isArray(merged[cat])) merged[cat] = [];
+      remote[cat].forEach(id => {
+        const sid = String(id);
+        if (sid === '' || sid === 'undefined' || merged[cat].includes(sid)) return;
+        merged[cat].push(sid);
+        changed = true;
+      });
+    });
+  }
+  if (changed && !lsSet('deleted_ids', JSON.stringify(merged))) throw _quotaError();
+  return merged;
+}
+function filterByTombstone(keyName, arr) {
+  const ids = getDeletedIds()[keyName];
+  if (!Array.isArray(ids) || ids.length === 0) return arr;
+  return arr.filter(item => !ids.includes(String(item.id)));
+}
+function _quotaError() { const e = new Error('端末に保存できませんでした'); e.name = 'QuotaExceededError'; return e; }
+
+// ── 一覧のマージ（id 単位・新しい時刻が勝つ・同点はGAS） ──
+// ・端末にある項目は必ず候補に入る（GASが空・欠けていても端末の項目は消えない）
+// ・項目を消すのは削除記録だけ
+function _mergeList(keyName, localArr, gasArr) {
+  const map = new Map(localArr.map(e => [e.id, e]));
+  gasArr.forEach(ge => {
+    const le = map.get(ge.id);
+    if (!le || Number(ge._ts || 0) >= Number(le._ts || 0)) map.set(ge.id, ge);
+  });
+  return filterByTombstone(keyName, Array.from(map.values()));
+}
+// 2つの一覧の中身が違うか（並び順は無視）
+function _listsDiffer(a, b) {
+  if (a.length !== b.length) return true;
+  const m = new Map(b.map(e => [e && e.id, _stableStr(e)]));
+  return a.some(e => m.get(e.id) !== _stableStr(e));
+}
+
+// ── 受信同期の入口 ──
+// 実行中にもう一度呼ばれても重ねて走らせない（起動時・画面に戻ったとき・設定保存時から呼ばれる）
+async function syncFromCloud() {
+  if (!_syncReady()) return;
+  if (_syncInFlight) return;
+  _syncInFlight = true;
+  _lastSyncAt = Date.now();
+  try {
+    await _syncFromCloudInner();
+  } finally {
+    _syncInFlight = false;
+  }
+}
+
+// いま何かを編集中か。編集中に受信し直したり一覧を描き直したりすると、入力中の欄から
+// カーソルが外れたり、編集中のメモが入れ替わったりするため、終わるまで待つ。
+// ★ 新しい入力フォーム・モーダルを作ったら、その状態をここに足すこと。
+function _isUserBusy() {
+  if (_importing) return true;
+  if (_formOpen || _editId !== null) return true;
+  return ['settings-modal', 'backup-modal'].some(id => {
+    const el = document.getElementById(id);
+    return !!el && el.style.display !== 'none';
+  });
+}
+// 同期後の再描画。編集中なら終わるまで待ってから描く（データは保存済みで、表示だけ後回し）
+function _renderWhenIdle() {
+  if (!_isUserBusy()) { renderAll(); return; }
+  if (_renderDeferTimer) return;
+  _renderDeferTimer = setInterval(() => {
+    if (_isUserBusy()) return;
+    clearInterval(_renderDeferTimer);
+    _renderDeferTimer = null;
+    renderAll();
+  }, 1500);
+}
+// 画面が表に戻ったとき（タブ切り替え・スマホで他のアプリから戻る等）に呼ぶ。
+// 受信が起動時の1回だけだと、開いたままの端末が他の端末の変更を知らないまま保存し、
+// 古い一覧でGASを上書きしてしまう。
+function maybeResync() {
+  if (_lastRenderDay !== null && _lastRenderDay !== todayKey()) _renderWhenIdle();   // 日付が変わっていたら描き直す
+  if (!_syncReady()) return;
+  if (isMaintenanceMode() || _importing || _syncInFlight || _pushAllInFlight) return;
+  if (Date.now() - _lastSyncAt < RESYNC_MIN_INTERVAL_MS) return;
+  if (_isUserBusy()) return;   // 編集が終わったあと、次に表に戻ったときに受信する
+  syncFromCloud();
+}
+
+// GASから全データを受け取る。合言葉はURLに付けず、送信の本文に入れる。
+// 応答を読めなかったときは同じ要求をもう1回だけ送る（読むだけの要求なので再送は無害）
+async function _fetchAllFromGas() {
+  const once = async () => {
+    const res = await fetch(getGasUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'getAll', token: getSyncToken() }),
+      cache: 'no-store'
+    });
+    return res.json();
+  };
+  try { return await once(); }
+  catch (e) { return await once(); }
+}
+
+async function _syncFromCloudInner() {
+  _syncStatus('同期中…', 'syncing');
+  try {
+    const gasData = await _fetchAllFromGas();
+    if (!gasData || typeof gasData !== 'object' || Array.isArray(gasData)) throw new Error('GASの応答がデータの形ではありません');
+
+    // エラー応答（合言葉違い・混雑・GAS側エラー）はデータとして扱わず、端末のデータに触れずに中断する。
+    // 【重要】status だけで判定しない。「status と message の2キーだけ」というエラー応答固有の形まで確かめる
+    // （健康アプリで、保存データに status というキーが紛れ込んで判定が誤爆した事故があった）。
+    if (gasData.status === 'error' && typeof gasData.message === 'string' && Object.keys(gasData).length <= 2) {
+      if (gasData.message === 'unauthorized') {
+        _syncStatus('合言葉を確認してください', 'error');
+      } else if (gasData.message === 'busy') {
+        console.warn('[混雑] syncFromCloud：GASが混み合っているため今回の受信同期をスキップしました');
+        _syncStatus('混み合っているため同期をスキップしました', 'error');
+      } else {
+        console.warn('[GASエラー] syncFromCloud：GAS側のエラーのため今回の受信同期をスキップしました（' + gasData.message + '）');
+        _syncStatus('GAS側のエラーのため同期をスキップしました', 'error');
+      }
+      setTimeout(() => _syncStatus(''), 5000);
+      _renderWhenIdle();
+      return;
+    }
+
+    // 受け取るのは決まったキー（deleted_ids・memos・categories）だけ。それ以外のキーは読まない
+    // （想定外のものが端末に保存され、そのままGASへ送り返される経路を作らない）。
+    const back = {};   // GASへ書き戻すもの（最後に1回の送信にまとめる）
+
+    // ① 削除記録を先に合わせる（このあとの一覧のマージで使う）
+    const gasDel = (gasData.deleted_ids && typeof gasData.deleted_ids === 'object' && !Array.isArray(gasData.deleted_ids)) ? gasData.deleted_ids : {};
+    const localDel = mergeDeletedIds(gasDel);
+    // この端末にあってGASに無い削除記録があれば送り直す（削除時の送信は送りっぱなしのため）
+    const delMissing = Object.keys(localDel).some(cat => Array.isArray(localDel[cat]) && localDel[cat].some(id =>
+      !(Array.isArray(gasDel[cat]) && gasDel[cat].map(String).includes(String(id)))));
+    if (delMissing) back.deleted_ids = localDel;
+
+    // ② 一覧を id 単位でマージ
+    SYNC_LISTS.forEach(key => {
+      const gasRaw = Array.isArray(gasData[key]) ? gasData[key] : [];
+      const gasArr = _saneList(gasRaw, key + '(GAS)');
+      const localArr = _saneList(load(key, []), key + '(端末)');
+      const merged = _mergeList(key, localArr, gasArr);
+      if (_listsDiffer(merged, localArr) || lsGet(key) === null) {
+        if (!lsSet(key, JSON.stringify(merged))) throw _quotaError();
+      }
+      // マージ結果がGASの中身と違えば書き戻す
+      // （端末だけにある項目・端末側が新しかった項目・削除記録で消えた項目・GAS側の壊れた要素）
+      if (_listsDiffer(merged, gasRaw)) back[key] = merged;
+    });
+
+    if (Object.keys(back).length > 0) pushBulkToCloud(back);
+    _syncStatus('同期済み');
+    setTimeout(() => _syncStatus(''), 3000);
+    _renderWhenIdle();
+  } catch (err) {
+    // 通信失敗だけでなく、マージ中の予期しないエラーもここに来る。原因を追えるよう記録する
+    console.error('[同期失敗] syncFromCloud', err);
+    if (err && (err.name === 'QuotaExceededError' || err.code === 22)) _showStorageError();
+    _syncStatus('オフライン');
+    setTimeout(() => _syncStatus(''), 5000);
+    _renderWhenIdle();
+  }
+}
+
+// ── 全データGAS同期（この端末のデータでGASを上書きする） ──
+async function pushAllToCloud() {
+  if (_pushAllInFlight) { showToast('同期中です。完了までお待ちください'); return; }
+  _pushAllInFlight = true;
+  try {
+    await _pushAllToCloudInner();
+  } finally {
+    _pushAllInFlight = false;
+  }
+}
+async function _pushAllToCloudInner() {
+  if (!getGasUrl()) { showToast('GAS URLが設定されていません'); return; }
+  if (!getSyncToken()) { showToast('合言葉が設定されていません'); return; }
+  _syncStatus('同期中…', 'syncing');
+  // 送るのは決まったキーだけ（端末内の他のキー＝設定・バックアップ・健康アプリのデータは送らない）
+  const forceTs = Date.now();
+  const data = { deleted_ids: getDeletedIds() };
+  SYNC_LISTS.forEach(key => {
+    data[key] = _saneList(load(key, []));
+    data['_ts_' + key] = forceTs;
+    lsSet('ts_' + key, String(forceTs));
+  });
+  showToast('GASへ全データ同期中...');
+
+  // 成功とみなすのは、GASが {status:'ok'} を返したときだけ。
+  // force:true は「この端末のデータを正として必ず書く」印（GAS側の時刻の新旧チェックを通す）。
+  let success = false, failKind = '';
+  const MAX_RETRY = 3;
+  for (let attempt = 0; attempt <= MAX_RETRY && !success; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, failKind === 'busy' ? 2000 : 200));
+    try {
+      const r = await _post({ bulk: true, force: true, data: data });
+      if (r.body && r.body.status === 'ok') {
+        success = true;
+      } else if (r.body && r.body.status === 'error') {
+        if (r.body.message === 'unauthorized') { failKind = 'auth'; break; }       // 送り直しても同じ
+        else if (r.body.message === 'busy') { failKind = 'busy'; }
+        else { failKind = 'server'; console.warn('[pushAllToCloud] GAS側エラー: ' + r.body.message); break; }
+      } else {
+        // 応答を読めなかった。書き込み自体は済んでいることがあるので、同じ内容を送り直して確かめる
+        failKind = 'unknown';
+      }
+    } catch (e) {
+      failKind = 'network';
+      console.warn('[pushAllToCloud] 通信失敗: ' + (e && e.message));
+    }
+  }
+  if (!success) {
+    const failMsgs = {
+      auth:    { status: '合言葉を確認してください',         toast: '同期に失敗しました。合言葉を確認してください' },
+      busy:    { status: '混み合っていて同期できませんでした',   toast: 'GASが混み合っていて同期できませんでした。少し待ってからもう一度お試しください' },
+      server:  { status: 'GAS側のエラーで同期できませんでした', toast: 'GAS側でエラーが起き、同期できませんでした' },
+      unknown: { status: '同期の結果を確認できませんでした',    toast: '同期の結果を確認できませんでした。少し待ってからもう一度お試しください' },
+      network: { status: '通信できませんでした',             toast: '通信できず、同期できませんでした。電波の状態を確認してください' },
+    };
+    const fm = failMsgs[failKind] || failMsgs.unknown;
+    _syncStatus(fm.status, 'error');
+    setTimeout(() => _syncStatus(''), 5000);
+    showToast(fm.toast);
+    return;
+  }
+  _syncStatus('同期済み');
+  setTimeout(() => _syncStatus(''), 3000);
+  showToast('全データ同期完了（メモ' + data.memos.length + '件）');
+}
+
+// ============================================================
+// 自動バックアップ・書き出し・読み込み
+// ============================================================
+function _exportObject() {
+  return {
+    app: APP_ID, ver: EXPORT_VER, exportedAt: new Date().toISOString(),
+    memos: getMemos(), categories: getCategories(), deletedIds: getDeletedIds(),
+  };
+}
+// いまの全データを端末内にバックアップする。保存できたら true
+function _writeBackup(name) {
+  try { return lsSet('backup_' + name, JSON.stringify(_exportObject())); }
+  catch (e) { console.error('[バックアップ失敗] ' + name, e); return false; }
+}
+// その日の最初の起動時だけ作る（2回目以降は上書きしない。データがおかしくなってから
+// 開き直しても、その日の朝の状態が残る）。7日より古いものは消す
+function autoBackup() {
+  const today = todayKey();
+  if (lsGet('backup_' + today) === null) _writeBackup(today);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - BACKUP_KEEP_DAYS);
+  const cutoffStr = cutoff.getFullYear() + '-' + String(cutoff.getMonth() + 1).padStart(2, '0') + '-' + String(cutoff.getDate()).padStart(2, '0');
+  _backupNames().forEach(n => { if (n.slice(0, 10) < cutoffStr) lsDel('backup_' + n); });
+}
+function _hhmm() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0');
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(_exportObject(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = APP_ID + '-' + todayKey() + '.json';
+  a.click();
+  showToast('書き出しました');
+}
+
+// 読み込むファイルの形式を確かめる。問題があれば理由の文字列、無ければ null
+function _validateImportData(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return 'ファイルの形式が違います';
+  if (d.app !== APP_ID) return '学びメモの書き出しファイルではありません';
+  if (!Array.isArray(d.memos) || !Array.isArray(d.categories)) return 'メモまたはカテゴリの一覧がありません';
+  const badMemo = d.memos.find(m => !_isSaneEntry(m) || !_isDateStr(m.date) || typeof m.category !== 'string' || m.category === '');
+  if (badMemo !== undefined) return 'メモの中に、id・日付・カテゴリのそろっていないものがあります';
+  const badCat = d.categories.find(c => !_isSaneEntry(c) || typeof c.label !== 'string' || c.label === '');
+  if (badCat !== undefined) return 'カテゴリの中に、id・名前のそろっていないものがあります';
+  if (d.deletedIds !== undefined) {
+    if (!d.deletedIds || typeof d.deletedIds !== 'object' || Array.isArray(d.deletedIds)) return '削除記録の形式が違います';
+    if (Object.keys(d.deletedIds).some(k => !Array.isArray(d.deletedIds[k]))) return '削除記録の形式が違います';
+  }
+  return null;
+}
+// ファイル（またはバックアップ）の一覧を、端末の一覧に取り込む。
+// ・ファイルにあって端末に無い項目 → 追加
+// ・両方にあって中身が違う項目 → ファイルの内容で上書き
+// ・端末にあってファイルに無い項目 → そのまま残す
+// ・削除記録のある項目 → 取り込まない（削除したidは復活させない）
+// 追加・上書きした項目にはいまの時刻を刻む（他の端末にも、取り込んだ内容が新しいものとして伝わる）
+function _applyImportedList(key, incoming) {
+  const now = Date.now();
+  const map = new Map(_saneList(load(key, [])).map(e => [e.id, e]));
+  const strip = e => { const c = Object.assign({}, e); delete c._ts; return _stableStr(c); };
+  const out = { added: 0, updated: 0, skippedDeleted: 0 };
+  incoming.forEach(e => {
+    if (_isDeleted(key, e.id)) { out.skippedDeleted++; return; }
+    const le = map.get(e.id);
+    if (!le) { map.set(e.id, Object.assign({}, e, { _ts: now })); out.added++; }
+    else if (strip(le) !== strip(e)) { map.set(e.id, Object.assign({}, e, { _ts: now })); out.updated++; }
+  });
+  if (!save(key, Array.from(map.values()))) throw _quotaError();
+  return out;
+}
+// 取り込みの本体（読み込み・自動バックアップから戻す、の共通処理）。
+// 取り込み中は個別の送信を止め、終わってから全データ送信を1回だけ行う。
+async function _runImport(d, backupLabel) {
+  // 取り込む直前の状態を残す。残せなかったら（容量不足など）取り込みを中止する（戻せない状態で上書きしない）
+  if (!_writeBackup(todayKey() + '-' + backupLabel + '-' + _hhmm())) {
+    showToast('取り込み前のバックアップを作れなかったため、中止しました');
+    return null;
+  }
+  let result;
+  _importing = true;
+  try {
+    if (d.deletedIds) mergeDeletedIds(d.deletedIds);
+    const c = _applyImportedList('categories', d.categories);
+    const m = _applyImportedList('memos', d.memos);
+    result = { memos: m, categories: c };
+  } catch (e) {
+    console.error('[取り込み失敗]', e);
+    _showStorageError();
+    return null;
+  } finally {
+    _importing = false;   // 立ったままだと、以後の送信がすべて無言で止まる。必ず下ろす
+  }
+  _formOpen = false; _editId = null; _menuOpenId = null;
+  renderAll(true);
+  if (_syncReady()) await pushAllToCloud();
+  return result;
+}
+function importData(ev) {
+  const input = ev.target;
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e2) => {
+    input.value = '';
+    let d;
+    try { d = JSON.parse(e2.target.result); }
+    catch (err) { showToast('ファイルを読めませんでした（JSONではありません）'); return; }
+    const problem = _validateImportData(d);
+    if (problem) { showToast('読み込みを中止しました：' + problem); return; }
+    if (!confirm('メモ ' + d.memos.length + ' 件・カテゴリ ' + d.categories.length + ' 件を読み込みます。\n同じメモがこの端末にある場合は、ファイルの内容で上書きします（ファイルに無いメモは残ります）。\nよろしいですか？')) return;
+    closeSettingsModal();
+    const r = await _runImport(d, '読み込み前');
+    if (!r) return;
+    const skipped = r.memos.skippedDeleted + r.categories.skippedDeleted;
+    showToast('読み込みました（追加 ' + r.memos.added + ' 件・上書き ' + r.memos.updated + ' 件'
+      + (skipped ? '・削除済みのため見送り ' + skipped + ' 件' : '') + '）');
+  };
+  reader.readAsText(file);
+}
+
+function showBackupModal() {
+  const names = _backupNames().reverse();
+  const list = document.getElementById('backup-list');
+  if (!names.length) {
+    list.innerHTML = '<div style="color:var(--text-light);padding:16px 0;font-size:14px">バックアップがありません</div>';
+  } else {
+    list.innerHTML = names.map(n => {
+      const snap = load('backup_' + n, null);
+      const ok = !!snap && _validateImportData(snap) === null;
+      const info = ok ? 'メモ ' + snap.memos.length + ' 件・カテゴリ ' + snap.categories.length + ' 件' : '読み込めません（壊れている可能性）';
+      return `<div class="backup-item">
+        <div><div class="backup-item-date">${escHtml(n)}</div><div class="backup-item-info">${info}</div></div>
+        ${ok ? `<button class="btn-restore" onclick="restoreFromBackup(${_jsq(n)})">戻す</button>` : ''}
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('settings-modal').style.display = 'none';
+  document.getElementById('backup-modal').style.display = 'flex';
+}
+function closeBackupModal() {
+  document.getElementById('backup-modal').style.display = 'none';
+  _afterModalClose();
+}
+async function restoreFromBackup(name) {
+  const snap = load('backup_' + name, null);
+  if (!snap || _validateImportData(snap) !== null) { showToast('このバックアップは読み込めません'); return; }
+  if (!confirm(name + ' のバックアップに戻しますか？\nメモの内容がこの時点に書き戻ります（そのあとに追加したメモは残ります）。')) return;
+  closeBackupModal();
+  // バックアップの中の削除記録は取り込まない（いまの削除記録のままにする）
+  const r = await _runImport({ app: APP_ID, memos: snap.memos, categories: snap.categories }, '戻す前');
+  if (!r) return;
+  showToast('バックアップから戻しました（追加 ' + r.memos.added + ' 件・書き戻し ' + r.memos.updated + ' 件）');
+}
+
+// ============================================================
+// 設定モーダル
+// ============================================================
+function showSettingsModal() {
+  const input = document.getElementById('gas-url-input');
+  input.value = getGasUrl();
+  const tokenInput = document.getElementById('sync-token-input');
+  tokenInput.value = getSyncToken(); tokenInput.type = 'password';
+  document.getElementById('sync-token-toggle-btn').textContent = '表示';
+  document.getElementById('settings-error').style.display = 'none';
+  renderMaintenanceBanner();
+  document.getElementById('settings-modal').style.display = 'flex';
+}
+function closeSettingsModal() {
+  document.getElementById('settings-modal').style.display = 'none';
+  _afterModalClose();
+}
+function _afterModalClose() { renderSetupHint(); }
+function toggleSyncTokenVisibility() {
+  const input = document.getElementById('sync-token-input');
+  const btn = document.getElementById('sync-token-toggle-btn');
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.textContent = show ? '隠す' : '表示';
+}
+function saveSettingsFromModal() {
+  const url = document.getElementById('gas-url-input').value.trim();
+  const token = document.getElementById('sync-token-input').value.trim();
+  const errEl = document.getElementById('settings-error');
+  const fail = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+  if (!url.startsWith('https://script.google.com/macros/s/')) return fail('URLは https://script.google.com/macros/s/... の形式で入力してください');
+  if (!token) return fail('合言葉を入力してください');
+  if (!lsSet('gas_url', url) || !lsSet('sync_token', token)) { _showStorageError(); return; }
+  closeSettingsModal();
+  showToast('設定を保存しました');
+  syncFromCloud();   // 保存直後に1回受信する（メンテナンスモード中でも走る＝その場で設定を確かめられる）
+}
+function renderSetupHint() {
+  const el = document.getElementById('setup-hint');
+  if (!el) return;
+  el.innerHTML = _syncReady() ? '' :
+    `<div class="setup-hint">同期はまだ設定されていません。いまはこの端末だけに保存されます。<button onclick="showSettingsModal()">同期を設定する</button></div>`;
+}
+
+// ============================================================
+// 画面の描画
+// ============================================================
+function _sortedCategories() {
+  return getCategories().slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+}
+function _catById(id) { return getCategories().find(c => c.id === id) || null; }
+// 「日付だけ」の記録か（文章の項目がどれも空）。一覧で「まだ書き足していない」と分かる表示にする
+function _isStub(m) {
+  return TEXT_FIELDS.every(f => !m[f] || !String(m[f]).trim());
+}
+function _mastery(m) { return Math.min(4, Math.max(0, Math.round(Number(m.mastery)) || 0)); }
+function _filteredMemos() {
+  let list = getMemos();
+  if (_filterCat !== null) list = list.filter(m => m.category === _filterCat);
+  if (_filterStub) list = list.filter(_isStub);
+  return list;
+}
+function _monthOf(m) { return _isDateStr(m.date) ? m.date.slice(0, 7) : ''; }
+function _openFormPrefix() { return _formOpen ? 'lma' : (_editId !== null ? 'lme' : null); }
+function _readFormInputs(p) {
+  const v = {};
+  ['date'].concat(TEXT_FIELDS).forEach(f => {
+    const el = document.getElementById(p + '-' + f);
+    v[f] = el ? (el.value || '') : '';
+  });
+  return v;
+}
+
+// 画面全体を描く。開いているフォームの入力中の文字は、描き直しても保つ
+// （fresh=true のときは保たない：フォームを開いた直後・保存後など、中身を入れ替えるとき）。
+function renderAll(fresh) {
+  const p = fresh ? null : _openFormPrefix();
+  const keep = (p && document.getElementById(p + '-date')) ? _readFormInputs(p) : null;
+  _lastRenderDay = todayKey();
+  renderSetupHint();
+  renderSummary();
+  renderQuick();
+  renderForm();
+  renderFilterBar();
+  renderList();
+  if (keep) {
+    Object.keys(keep).forEach(f => {
+      const el = document.getElementById(p + '-' + f);
+      if (el) el.value = keep[f];
+    });
+  }
+}
+
+function renderSummary() {
+  const cats = _sortedCategories();
+  const curYm = todayKey().slice(0, 7);
+  const counts = {};
+  let total = 0;
+  getMemos().forEach(m => {
+    if (_monthOf(m) === curYm) { counts[m.category] = (counts[m.category] || 0) + 1; total++; }
+  });
+  const known = new Set(cats.map(c => c.id));
+  const pills = cats.filter(c => counts[c.id]).map(c =>
+    `<span class="spill" style="background:${_safeColor(c.fill, '#F0EDE8')}">${escHtml(c.label)} <b>${counts[c.id]}</b>回</span>`
+  );
+  const other = Object.keys(counts).filter(id => !known.has(id)).reduce((n, id) => n + counts[id], 0);
+  if (other) pills.push(`<span class="spill" style="background:#F0EDE8">その他 <b>${other}</b>回</span>`);
+  document.getElementById('summary').innerHTML = `<div class="summary">
+    <div class="stitle">今月の学び（${_monthLabel(curYm)}）${total ? '　合計 ' + total + ' 回' : ''}</div>
+    <div class="srow">${pills.join('') || '<span class="sempty">今月はまだ記録がありません</span>'}</div>
+  </div>`;
+}
+
+function _catChipsHtml(selId, pickFn, addFn) {
+  return `<div class="cat-picker">
+    ${_sortedCategories().map(c => `<button type="button" class="cat-chip${selId === c.id ? ' selected' : ''}"${selId === c.id ? ` style="background:${_safeColor(c.fill, '#F0EDE8')}"` : ''} onclick="${pickFn}(${_jsq(c.id)})">${escHtml(c.label)}</button>`).join('')}
+    <button type="button" class="cat-chip add-cat" onclick="${addFn}">＋ カテゴリ追加</button>
+  </div>`;
+}
+
+function renderQuick() {
+  const el = document.getElementById('quick-container');
+  if (!el) return;
+  if (_quickCat !== null && !_catById(_quickCat)) _quickCat = null;
+  el.innerHTML = `<div class="quick-card">
+    <div class="quick-title">📅 日付だけ記録</div>
+    <div class="quick-sub">日付とカテゴリだけ先に残せます。内容は、あとで一覧から書き足せます。</div>
+    <input type="date" id="quick-date" value="${escHtml(_quickDate || todayKey())}" onchange="quickSetDate(this.value)">
+    ${_catChipsHtml(_quickCat, 'quickPickCat', "addCategory('quick')")}
+    <button class="quick-save${_quickCat ? '' : ' off'}" onclick="quickSave()">この日を記録する</button>
+  </div>`;
+}
+
+function renderForm() {
+  const trig = document.getElementById('new-trigger');
+  if (trig) trig.style.display = _formOpen ? 'none' : '';
+  document.getElementById('form-container').innerHTML = _formOpen
+    ? `<div class="add-card"><h2>新しい学びメモ</h2>${_formFieldsHtml('lma', null)}
+        <button class="save-btn" onclick="saveMemo('lma')">この学びメモを保存</button>
+        <button class="cancel-btn" onclick="toggleForm()">閉じる</button></div>`
+    : '';
+}
+
+function renderFilterBar() {
+  const stubCount = getMemos().filter(_isStub).length;
+  document.getElementById('filter-bar').innerHTML = `<div class="filter-bar">
+    <span class="flabel">絞り込み：</span>
+    <button class="filter-chip${_filterCat === null ? ' on' : ''}" onclick="setFilter(null)">すべて</button>
+    ${_sortedCategories().map(c => `<button class="filter-chip${_filterCat === c.id ? ' on' : ''}" onclick="setFilter(${_jsq(c.id)})">${escHtml(c.label)}</button>`).join('')}
+    ${(stubCount || _filterStub) ? `<button class="filter-chip stub-chip${_filterStub ? ' on' : ''}" onclick="toggleStubFilter()">日付だけ（${stubCount}）</button>` : ''}
+  </div>`;
+}
+
+function renderList() {
+  const listEl = document.getElementById('memo-list');
+  const shown = _filteredMemos();
+  const byMonth = {};
+  shown.forEach(m => { const ym = _monthOf(m); (byMonth[ym] = byMonth[ym] || []).push(m); });
+  const months = Object.keys(byMonth).sort().reverse();
+  const latestYm = months[0];
+  listEl.innerHTML = months.map(ym => {
+    const isOpen = _monthOpen[ym] !== undefined ? _monthOpen[ym] : (ym === latestYm);
+    const items = byMonth[ym].slice().sort((a, b) => {
+      if (String(a.date) !== String(b.date)) return String(a.date) < String(b.date) ? 1 : -1;
+      return a.id < b.id ? 1 : -1;   // 同じ日は、あとから作ったものが上（編集しても並びは変わらない）
+    });
+    return `<div class="month-group">
+      <button class="month-head${isOpen ? ' open' : ''}" onclick="toggleMonth(${_jsq(ym)})"><span class="arrow">▶</span>${_monthLabel(ym)}<span class="count">${items.length}件</span></button>
+      <div class="month-body${isOpen ? ' open' : ''}">${items.map(_memoCardHtml).join('')}</div>
+    </div>`;
+  }).join('') || `<div class="empty-list">${getMemos().length ? 'この条件に合うメモはありません' : 'まだ学びメモがありません'}</div>`;
+}
+
+function _memoCardHtml(m) {
+  const cat = _catById(m.category);
+  const fill = _safeColor(cat && cat.fill, '#F0EDE8');
+  const solid = _safeColor(cat && cat.solid, '#B4B2A9');
+  const catLabel = cat ? cat.label : 'その他';
+  const style = `--lm-fill:${fill};--lm-solid:${solid}`;
+
+  // 編集中はカードの中をフォームに差し替える
+  if (_editId === m.id) {
+    return `<div class="memo" style="${style}"><div class="add-card" style="box-shadow:none;padding:0;margin:0">
+      <h2>${_isStub(m) ? '内容を書き足す' : '学びメモを編集'}</h2>${_formFieldsHtml('lme', m)}
+      <button class="save-btn" onclick="saveMemo('lme')">保存</button>
+      <button class="cancel-btn" onclick="cancelEdit()">キャンセル</button></div></div>`;
+  }
+
+  const menu = `<button class="kebab" onclick="toggleMenu(event, ${_jsq(m.id)})" aria-label="メニュー">⋯</button>
+    <div class="memo-menu${_menuOpenId === m.id ? ' open' : ''}">
+      <button onclick="openEdit(${_jsq(m.id)})">✏️ 編集</button>
+      <button class="del" onclick="deleteMemo(${_jsq(m.id)})">🗑 削除</button>
+    </div>`;
+  const mastery = _mastery(m);
+  const masteryHtml = mastery
+    ? `<span class="memo-mastery">${MASTERY_LABELS[mastery - 1]} <span class="dots">${[1, 2, 3, 4].map(i => `<i${i <= mastery ? ' class="on"' : ''}></i>`).join('')}</span></span>`
+    : '';
+
+  // 「日付だけ」の記録：ひと目で分かる小さなカードにし、書き足すボタンを出す
+  if (_isStub(m)) {
+    return `<div class="memo stub" style="${style}">${menu}
+      <div class="memo-top">
+        <span class="memo-cat">${escHtml(catLabel)}</span>
+        <span class="memo-date">${escHtml(_dateLabel(m.date))}</span>
+        <span class="stub-badge">日付だけ</span>${masteryHtml}
+      </div>
+      <button class="stub-add" onclick="openEdit(${_jsq(m.id)})">＋ 内容を書き足す</button>
+    </div>`;
+  }
+
+  // 未入力の項目は見出しごと出さない
+  let body = '';
+  if (m.title) body += `<div class="memo-title">${escHtml(m.title)}</div>`;
+  if (m.course || m.format) {
+    body += `<div class="memo-teacher">${escHtml(m.course || '')}${m.format ? `<span class="fmt">${escHtml(m.format)}</span>` : ''}</div>`;
+  }
+  if (m.content) body += `<div class="memo-block"><div class="blabel">学んだ内容・ポイント</div><div class="btext">${escHtml(m.content)}</div></div>`;
+  if (m.reaction) body += `<div class="memo-block"><div class="blabel">あおの反応・様子</div><div class="btext ao">${escHtml(m.reaction)}</div></div>`;
+  if (m.next) body += `<div class="memo-block next"><div class="blabel">次回試したいこと</div><div class="btext">${escHtml(m.next)}</div></div>`;
+  if (m.link) {
+    const isUrl = /^https?:\/\//i.test(String(m.link));
+    body += `<div class="memo-block memo-link"><div class="blabel">参考リンク・資料</div>${
+      isUrl ? `<a href="${escHtml(m.link)}" target="_blank" rel="noopener noreferrer">${escHtml(m.link)}</a>` : `<div class="btext">${escHtml(m.link)}</div>`
+    }</div>`;
+  }
+  return `<div class="memo" style="${style}">${menu}
+    <div class="memo-top">
+      <span class="memo-cat">${escHtml(catLabel)}</span>
+      <span class="memo-date">${escHtml(_dateLabel(m.date))}</span>${masteryHtml}
+    </div>${body}</div>`;
+}
+
+// フォームの項目（p='lma'＝新規 / 'lme'＝編集。新規のとき m=null）
+function _formFieldsHtml(p, m) {
+  const selCat = p === 'lma' ? _formCat : _editCat;
+  const selFmt = p === 'lma' ? _formFormat : _editFormat;
+  const selMas = p === 'lma' ? _formMastery : _editMastery;
+  const val = f => escHtml(m ? (m[f] || '') : '');
+  return `
+    <div class="field"><label>日付</label><input type="date" id="${p}-date" value="${escHtml(m ? m.date : todayKey())}"></div>
+    <div class="field"><label>カテゴリ</label>${_catChipsHtml(selCat, p === 'lma' ? 'formPickCat' : 'editPickCat', `addCategory(${_jsq(p)})`)}</div>
+    <div class="field"><label>タイトル</label><input type="text" id="${p}-title" value="${val('title')}" placeholder="例：後ろ足の負重トレーニング"></div>
+    <div class="field"><label>講座名・先生の名前</label><input type="text" id="${p}-course" value="${val('course')}" placeholder="例：筋トレ講座／〇〇先生"></div>
+    <div class="field"><label>学んだ場所・形式</label><div class="seg">
+      ${FORMATS.map(f => `<button type="button"${selFmt === f ? ' class="on"' : ''} onclick="pickFormat(${_jsq(p)},${_jsq(f)})">${f}</button>`).join('')}
+    </div></div>
+    <div class="field"><label>学んだ内容・ポイント</label><textarea id="${p}-content" placeholder="習ったこと、覚えておきたいポイントなど">${val('content')}</textarea></div>
+    <div class="field"><label>あおの反応・様子</label><textarea id="${p}-reaction" placeholder="あおがどんな様子だったか など">${val('reaction')}</textarea></div>
+    <div class="field"><label>次回試したいこと</label><textarea id="${p}-next" placeholder="次にやってみたいこと、宿題など">${val('next')}</textarea></div>
+    <div class="field"><label>参考リンク・資料</label><input type="url" id="${p}-link" value="${val('link')}" placeholder="テキスト・動画・DVDのURLなど"></div>
+    <div class="field"><label>習熟度</label><div class="seg">
+      ${MASTERY_LABELS.map((lb, i) => `<button type="button"${selMas === i + 1 ? ' class="on"' : ''} onclick="pickMastery(${_jsq(p)},${i + 1})">${lb}</button>`).join('')}
+    </div><div class="hint">形式・習熟度は、選んであるものをもう一度押すと未選択に戻せます。</div></div>`;
+}
+
+// ============================================================
+// 操作
+// ============================================================
+// ── 日付だけ記録 ──
+function quickSetDate(v) { _quickDate = (_isDateStr(v) && v !== todayKey()) ? v : null; }
+function quickPickCat(id) { _quickCat = (_quickCat === id) ? null : id; renderAll(); }
+function quickSave() {
+  const el = document.getElementById('quick-date');
+  const date = (el && el.value) || _quickDate || todayKey();
+  if (!_isDateStr(date)) { showToast('日付を入力してください'); return; }
+  if (!_quickCat || !_catById(_quickCat)) { showToast('カテゴリを選んでください'); return; }
+  const memos = getMemos();
+  if (memos.some(m => m.date === date && m.category === _quickCat)
+      && !confirm(_dateLabel(date) + 'には、同じカテゴリの記録がすでにあります。もう1件追加しますか？')) return;
+  memos.push({ id: _newId('lm'), date: date, category: _quickCat, title: '', course: '', format: '', content: '', reaction: '', next: '', link: '', mastery: 0, _ts: Date.now() });
+  if (!setMemos(memos)) return;
+  const label = (_catById(_quickCat) || {}).label || '';
+  _quickCat = null; _quickDate = null;
+  _monthOpen[date.slice(0, 7)] = true;   // 記録した月が閉じていると見えないので開く
+  showToast(_dateLabel(date) + '・' + label + ' を記録しました');
+  renderAll();
+}
+
+// ── くわしく書く（新規フォーム） ──
+function toggleForm() {
+  _formOpen = !_formOpen;
+  if (_formOpen) {
+    _formCat = null; _formFormat = 'Zoom'; _formMastery = 1;
+    _editId = null;
+  }
+  _menuOpenId = null;
+  renderAll(true);
+}
+function formPickCat(id) { _formCat = id; renderAll(); }
+function editPickCat(id) { _editCat = id; renderAll(); }
+// 形式・習熟度は、選択中のものをもう一度押すと未選択に戻る
+function pickFormat(p, f) {
+  if (p === 'lma') _formFormat = (_formFormat === f) ? '' : f; else _editFormat = (_editFormat === f) ? '' : f;
+  renderAll();
+}
+function pickMastery(p, n) {
+  if (p === 'lma') _formMastery = (_formMastery === n) ? 0 : n; else _editMastery = (_editMastery === n) ? 0 : n;
+  renderAll();
+}
+
+// where: 'quick'（日付だけ記録）/ 'lma'（新規フォーム）/ 'lme'（編集フォーム）
+function addCategory(where) {
+  const name = prompt('新しいカテゴリ名を入力してください（例：ハイドロセラピー）');
+  if (!name || !name.trim()) return;
+  const label = name.trim().slice(0, 30);
+  const cats = getCategories();
+  const existing = cats.find(c => c.label === label);
+  let catId;
+  if (existing) {
+    catId = existing.id;   // 同じ名前があれば新しく作らず、それを選ぶ
+  } else {
+    // まだ使っていない色を割り当てる（尽きたら最初から）
+    const used = new Set(cats.map(c => c.solid));
+    const color = PALETTE.find(c => !used.has(c.solid)) || PALETTE[cats.length % PALETTE.length];
+    const maxOrder = cats.reduce((mx, c) => Math.max(mx, Number(c.order) || 0), 0);
+    catId = _newId('lcat');
+    cats.push({ id: catId, label: label, fill: color.fill, solid: color.solid, _ts: Date.now(), order: maxOrder + 1 });
+    if (!setCategories(cats)) return;
+  }
+  if (where === 'quick') _quickCat = catId;
+  else if (where === 'lma') _formCat = catId;
+  else _editCat = catId;
+  renderAll();
+}
+
+function saveMemo(p) {
+  const vals = _readFormInputs(p);
+  if (!_isDateStr(vals.date)) { showToast('日付を入力してください'); return; }
+  const cat = p === 'lma' ? _formCat : _editCat;
+  if (!cat || !_catById(cat)) { showToast('カテゴリを選んでください'); return; }
+  const fields = {
+    date: vals.date, category: cat, title: vals.title.trim(), course: vals.course.trim(),
+    format: p === 'lma' ? _formFormat : _editFormat,
+    content: vals.content.trim(), reaction: vals.reaction.trim(), next: vals.next.trim(), link: vals.link.trim(),
+    mastery: p === 'lma' ? _formMastery : _editMastery, _ts: Date.now(),
+  };
+  const memos = getMemos();
+  if (p === 'lma') {
+    memos.push(Object.assign({ id: _newId('lm') }, fields));
+    if (!setMemos(memos)) return;
+    _formOpen = false;
+    showToast('学びメモを追加しました');
+  } else {
+    const editId = _editId;
+    if (!memos.some(m => m.id === editId)) {
+      showToast('このメモは別の端末で削除されています。保存できませんでした');
+      return;
+    }
+    if (!setMemos(memos.map(m => m.id === editId ? Object.assign({}, m, fields) : m))) return;
+    _editId = null;
+    showToast('保存しました');
+  }
+  _monthOpen[vals.date.slice(0, 7)] = true;   // 保存したメモの月が閉じていると見えないので開く
+  renderAll(true);
+}
+
+function openEdit(id) {
+  const m = getMemos().find(e => e.id === id);
+  if (!m) return;
+  _editId = id;
+  _editCat = _catById(m.category) ? m.category : null;
+  _editFormat = FORMATS.includes(m.format) ? m.format : '';
+  _editMastery = _mastery(m);
+  _formOpen = false;
+  _menuOpenId = null;
+  renderAll(true);
+}
+function cancelEdit() { _editId = null; renderAll(true); }
+
+function deleteMemo(id) {
+  const m = getMemos().find(e => e.id === id);
+  if (!m) return;
+  const name = m.title || m.content || m.course || (_dateLabel(m.date) + 'の記録');
+  if (!confirm('「' + String(name).slice(0, 20) + '」を削除しますか？')) return;
+  // 削除記録を先に残してから消す（記録が無いと、他の端末から同期で戻ってきてしまう）
+  if (!addDeletedIds('memos', [id])) return;
+  if (!setMemos(getMemos().filter(e => e.id !== id))) return;
+  _menuOpenId = null;
+  if (_editId === id) _editId = null;
+  showToast('削除しました');
+  renderAll();
+}
+
+function toggleMenu(event, id) {
+  event.stopPropagation();
+  _menuOpenId = (_menuOpenId === id) ? null : id;
+  renderAll();
+}
+function toggleMonth(ym) {
+  const months = [...new Set(_filteredMemos().map(_monthOf))].sort().reverse();
+  const cur = _monthOpen[ym] !== undefined ? _monthOpen[ym] : (ym === months[0]);
+  _monthOpen[ym] = !cur;
+  renderAll();
+}
+function setFilter(id) { _filterCat = id; _menuOpenId = null; renderAll(); }
+function toggleStubFilter() { _filterStub = !_filterStub; _menuOpenId = null; renderAll(); }
+
+// ⋯メニューの外側を押したら閉じる
+document.addEventListener('click', e => {
+  if (_menuOpenId !== null && !e.target.closest('.kebab') && !e.target.closest('.memo-menu')) {
+    _menuOpenId = null;
+    renderAll();
+  }
+});
+
+// ============================================================
+// 起動
+// ============================================================
+// 起動時の準備を1つずつ安全に実行する（1つの失敗で画面が真っ白になるのを防ぐ）
+function _bootStep(name, fn) {
+  try { fn(); }
+  catch (e) {
+    console.error('[起動処理失敗] ' + name, e);
+    if (e && (e.name === 'QuotaExceededError' || e.code === 22)) { try { _showStorageError(); } catch (e2) {} }
+  }
+}
+_bootStep('seedCategories', seedCategories);
+_bootStep('autoBackup', autoBackup);
+_bootStep('renderAll', () => renderAll(true));
+_bootStep('renderMaintenanceBanner', renderMaintenanceBanner);
+
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') maybeResync(); });
+window.addEventListener('focus', maybeResync);
+window.addEventListener('pageshow', e => { if (e && e.persisted) maybeResync(); });
+
+// 起動時の受信同期（メンテナンスモード中は行わない）
+if (!isMaintenanceMode()) syncFromCloud();
+</script>
+</body>
+</html>
