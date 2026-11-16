@@ -95,6 +95,7 @@ function makeApp(name, gas, initialStore) {
       if (/token=/.test(url)) throw new Error('URLに合言葉を付けてはいけない');
       const body = JSON.parse(o.body);
       app.posts.push(body);
+      if (app.failWrites && body.action !== 'getAll') throw new Error('書き込みの送信だけ失敗（受信はできる）');
       const out = gas.post(o.body);
       if (app.dropResponse) throw new Error('応答を受け取れなかった（書き込みは済んでいる）');
       return { ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(out)) };

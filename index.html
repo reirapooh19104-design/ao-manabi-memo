@@ -309,6 +309,8 @@ let _quickDate = null;       // 「日付だけ記録」の日付（null＝今�
 let _importing = false;        // 読み込み中は個別の送信を止め、最後に全データ送信1回にまとめる
 let _syncInFlight = false;     // 受信同期の実行中（多重実行防止）
 let _syncQueued = false;       // 実行中に、もう1回の受信同期を頼まれた
+let _unsent = false;           // 保存したが、GASへ届いたと確かめられていない変更がある（端末には保存済み）
+let _saveSeq = 0;              // 保存のたびに増える番号（「どの保存までGASへ届いたか」の判定用）
 let _lastSyncAt = 0;           // 直近の受信同期を始めた時刻
 let _pushAllInFlight = false;  // 全データGAS同期の実行中（連打防止）
 let _renderDeferTimer = null;  // 編集中のため後回しにした再描画の見張り
@@ -428,7 +430,12 @@ function save(key, val) {
 // ・通信できないときは何も送られない。端末には保存済みで、次に受信できたときの書き戻しで届く
 function _sendAfterSave(key, val, ts) {
   if (_importing || !_syncReady()) return;
-  if (SYNC_LISTS.includes(key) && !isMaintenanceMode()) { syncFromCloud(); return; }
+  if (SYNC_LISTS.includes(key) && !isMaintenanceMode()) {
+    // 届いたと確かめられるまで「未送信あり」にしておく（受信や書き戻しに失敗しても、次の機会に必ず送り直す）
+    _unsent = true; _saveSeq++;
+    syncFromCloud();
+    return;
+  }
   pushPairToCloud(key, val, ts);
 }
 
@@ -526,12 +533,18 @@ async function pushPairToCloud(key, val, ts) {
 }
 // 複数のキーを1回の送信にまとめて送る（時刻なし＝GAS側の新旧チェックを通さない。書き戻し・削除記録用）
 async function pushBulkToCloud(data) {
-  if (_importing) return;
-  if (!_syncReady()) return;
+  if (_importing) return false;
+  if (!_syncReady()) return false;
   try {
     const r = await _post({ bulk: true, data: data });
     _logPushResult('pushBulkToCloud', Object.keys(data).join(','), r.body);
-  } catch (e) { console.error('[push失敗] pushBulkToCloud', e); }
+    return !!r.body && r.body.status === 'ok';   // GASが「書いた」と答えたときだけ true
+  } catch (e) { console.error('[push失敗] pushBulkToCloud', e); return false; }
+}
+// 同期の表示を、ふだんの状態に戻す。未送信の変更があるあいだは、その旨を出したままにする
+function _showIdleStatus() {
+  if (_unsent && _syncReady()) _syncStatus('未送信の変更があります（この端末には保存済み。次に同期できたときに送ります）', 'error');
+  else _syncStatus('');
 }
 
 // ── 削除記録（tombstone） ──
@@ -667,7 +680,8 @@ function maybeResync() {
   if (_lastRenderDay !== null && _lastRenderDay !== todayKey()) _renderWhenIdle();   // 日付が変わっていたら描き直す
   if (!_syncReady()) return;
   if (isMaintenanceMode() || _importing || _syncInFlight || _pushAllInFlight) return;
-  if (Date.now() - _lastSyncAt < RESYNC_MIN_INTERVAL_MS) return;
+  // 未送信の変更があるときは、間隔を待たずに同期する（送り直しを早くするため）
+  if (!_unsent && Date.now() - _lastSyncAt < RESYNC_MIN_INTERVAL_MS) return;
   if (_isUserBusy()) return;   // 編集が終わったあと、次に表に戻ったときに受信する
   syncFromCloud();
 }
@@ -707,7 +721,7 @@ async function _syncFromCloudInner() {
         console.warn('[GASエラー] syncFromCloud：GAS側のエラーのため今回の受信同期をスキップしました（' + gasData.message + '）');
         _syncStatus('GAS側のエラーのため同期をスキップしました', 'error');
       }
-      setTimeout(() => _syncStatus(''), 5000);
+      setTimeout(_showIdleStatus, 5000);
       _renderWhenIdle();
       return;
     }
@@ -738,9 +752,19 @@ async function _syncFromCloudInner() {
       if (_listsDiffer(merged, gasRaw)) back[key] = merged;
     });
 
-    if (Object.keys(back).length > 0) pushBulkToCloud(back);
+    // 書き戻すものが無い＝端末とGASが同じ。書き戻しがあるときは、GASが「書いた」と答えたら届いたとみなす
+    // （そのあいだに次の保存があった場合は、その保存の分の同期に任せる）
+    const seq = _saveSeq;
+    if (Object.keys(back).length === 0) { _unsent = false; }
+    else {
+      pushBulkToCloud(back).then(ok => {
+        if (ok) { if (_saveSeq === seq) _unsent = false; return; }
+        _unsent = true;   // 届いたか分からない。次の同期で比べ直して送り直す
+        if (!_syncInFlight) _showIdleStatus();
+      });
+    }
     _syncStatus('同期済み');
-    setTimeout(() => _syncStatus(''), 3000);
+    setTimeout(_showIdleStatus, 3000);
     _refreshCatModalIfOpen();
     _renderWhenIdle();
   } catch (err) {
@@ -748,7 +772,7 @@ async function _syncFromCloudInner() {
     console.error('[同期失敗] syncFromCloud', err);
     if (err && (err.name === 'QuotaExceededError' || err.code === 22)) _showStorageError();
     _syncStatus('オフライン');
-    setTimeout(() => _syncStatus(''), 5000);
+    setTimeout(_showIdleStatus, 5000);
     _renderWhenIdle();
   }
 }
@@ -814,6 +838,7 @@ async function _pushAllToCloudInner() {
     showToast(fm.toast);
     return;
   }
+  _unsent = false;   // この端末の一覧がそのままGASに入った
   _syncStatus('同期済み');
   setTimeout(() => _syncStatus(''), 3000);
   showToast('全データ同期完了（メモ' + data.memos.length + '件）');
@@ -1555,6 +1580,7 @@ _bootStep('renderMaintenanceBanner', renderMaintenanceBanner);
 
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') maybeResync(); });
 window.addEventListener('focus', maybeResync);
+window.addEventListener('online', maybeResync);   // 電波が戻ったとき（未送信の変更があれば、ここで送り直す）
 window.addEventListener('pageshow', e => { if (e && e.persisted) maybeResync(); });
 
 // 起動時の受信同期（メンテナンスモード中は行わない）

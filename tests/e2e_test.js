@@ -484,7 +484,7 @@ const boot = async (name, gas, store) => { const a = makeApp(name, gas, store); 
     t('続けて3回並べ替えても、最後の並びがGASに入る（途中の同期に取りこぼされない）', eq(gas.all().categories.slice().sort((a, b) => a.order - b.order).map(c => c.id), catIds(SP)) && !eq(catIds(SP), o0));
     // メモでも同じ：PCの編集を知らないスマホが別のメモを保存しても、PCの編集がGASから消えない
     const target = PC.get('memos')[0];
-    await act(PC, `openEdit(${JSON.stringify(target.id)})`); PC.el('lme-title').value = 'PCで直したタイトル';
+    await act(PC, `openEdit(${JSON.stringify(target.id)})`); fill(PC, 'lme', { date: target.date, title: 'PCで直したタイトル' });
     if (!PC.ev('_editCat')) PC.ev("editPickCat('lcat_kintore')");
     await act(PC, "saveMemo('lme')");
     await quick(SP, '2026-07-07', 'lcat_kintore');
@@ -494,6 +494,65 @@ const boot = async (name, gas, store) => { const a = makeApp(name, gas, store); 
     await quick(SP, '2026-07-08', 'lcat_kintore');
     t('メンテナンスモード中の保存は、受信せずにそのまま送る（従来どおり）', SP.posts.length === 1 && SP.posts[0].bulk === true && eq(Object.keys(SP.posts[0].data), ['memos', '_ts_memos']));
     SP.ev('setMaintenanceMode(false)');
+    await settleAll();
+  }
+
+
+  console.log('27. 保存したときに受信・送信ができなかった場合（電波なし・混雑・エラー）');
+  {
+    await settleAll();
+    const UNSENT = '未送信の変更があります';
+    const inGas = (date) => gas.all().memos.some(m => m.date === date);
+    const has = (app, date) => app.get('memos').some(m => m.date === date);
+    const statusAfter = (app) => { app.runTimers(); return app.el('sync-status').textContent; };
+    // ① 電波なし
+    PC.offline = true; PC.expectErrors = true;
+    await quick(PC, '2026-06-01', 'lcat_kintore');
+    t('電波なし：書いた内容は端末に残り、GASには届いていない', has(PC, '2026-06-01') && !inGas('2026-06-01'));
+    t('電波なし：「未送信の変更があります」が出たままになる', PC.el('sync-status').textContent.includes(UNSENT) && PC.ev('_unsent') === true, PC.el('sync-status').textContent);
+    await quick(PC, '2026-06-02', 'lcat_kintore');
+    PC.offline = false; PC.expectErrors = false;
+    PC.ev('maybeResync()'); await settle();   // 1分たっていなくても、画面に戻る・電波が戻るだけで送り直す
+    t('電波が戻ると、1分待たずに送り直され、2件ともGASへ届く', inGas('2026-06-01') && inGas('2026-06-02') && PC.ev('_unsent') === false);
+    t('届いたら「未送信」の表示が消える', !statusAfter(PC).includes(UNSENT));
+    // ② GASが混雑
+    gasOpts.busy = true;
+    await quick(PC, '2026-06-03', 'lcat_kintore');
+    t('混雑：端末に残り、GASには届かず、未送信として覚えている', has(PC, '2026-06-03') && PC.ev('_unsent') === true && statusAfter(PC).includes(UNSENT));
+    gasOpts.busy = false;
+    t('（混雑のあいだ、GASの中身は変わっていない）', !inGas('2026-06-03'));
+    PC.ev('maybeResync()'); await settle();
+    t('混雑が解けると送り直され、GASへ届く', inGas('2026-06-03') && PC.ev('_unsent') === false);
+    // ③ 合言葉違い（GASが断る）
+    const tok = PC.store[LS + 'sync_token']; PC.store[LS + 'sync_token'] = 'まちがい';
+    await quick(PC, '2026-06-04', 'lcat_kintore');
+    t('合言葉違い：端末に残り、GASには届かず、未送信として覚えている', has(PC, '2026-06-04') && !inGas('2026-06-04') && PC.ev('_unsent') === true);
+    PC.store[LS + 'sync_token'] = tok; PC.ev('maybeResync()'); await settle();
+    t('合言葉を直すと送り直され、GASへ届く', inGas('2026-06-04') && PC.ev('_unsent') === false);
+    // ④ 受信はできたが、書き戻しの送信だけ失敗
+    PC.failWrites = true; PC.expectErrors = true;
+    await quick(PC, '2026-06-05', 'lcat_kintore');
+    t('書き戻しだけ失敗：端末に残り、GASには届かず、未送信として覚えている', has(PC, '2026-06-05') && !inGas('2026-06-05') && PC.ev('_unsent') === true && statusAfter(PC).includes(UNSENT));
+    PC.failWrites = false; PC.expectErrors = false;
+    PC.ev('maybeResync()'); await settle();
+    t('次の同期で比べ直して送り直され、GASへ届く', inGas('2026-06-05') && PC.ev('_unsent') === false && !statusAfter(PC).includes(UNSENT));
+    // ⑤ 未送信のままアプリを閉じて開き直した場合（覚えていなくても、起動時の同期で送られる）
+    PC.offline = true; PC.expectErrors = true;
+    await quick(PC, '2026-06-06', 'lcat_kintore');
+    await act(PC, `openEdit(${JSON.stringify(PC.get('memos').find(m => m.date === '2026-06-05').id)})`); fill(PC, 'lme', { date: '2026-06-05', title: '電波なしで直した' }); if (!PC.ev('_editCat')) PC.ev("editPickCat('lcat_kintore')"); await act(PC, "saveMemo('lme')");
+    PC.offline = false; PC.expectErrors = false;
+    const PC2 = await boot('PC（開き直し）', gas, PC.store);
+    t('未送信のまま閉じても、開き直したときの同期で、追加も編集もGASへ届く', inGas('2026-06-06') && gas.all().memos.find(m => m.date === '2026-06-05').title === '電波なしで直した' && PC2.ev('_unsent') === false);
+    PC.ev('_unsent = false');
+    await sync(SP);
+    t('もう1台にも、電波なしのあいだの6件と編集がすべて届く', ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06'].every(dt => has(SP, dt)) && SP.get('memos').find(m => m.date === '2026-06-05').title === '電波なしで直した');
+    // ⑥ 電波なしのあいだに、もう1台が同じ一覧を変えていても、どちらも残る
+    PC.offline = true; PC.expectErrors = true;
+    await quick(PC, '2026-06-07', 'lcat_kintore');
+    await quick(SP, '2026-06-08', 'lcat_kintore');
+    PC.offline = false; PC.expectErrors = false;
+    PC.ev('maybeResync()'); await settle(); await sync(SP);
+    t('電波なしのあいだに、もう1台が別のメモを書いていても、両方とも両端末とGASに残る', ['2026-06-07', '2026-06-08'].every(dt => has(PC, dt) && has(SP, dt) && inGas(dt)));
     await settleAll();
   }
 
