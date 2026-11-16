@@ -308,6 +308,7 @@ let _quickDate = null;       // 「日付だけ記録」の日付（null＝今�
 // ── 同期の状態 ──
 let _importing = false;        // 読み込み中は個別の送信を止め、最後に全データ送信1回にまとめる
 let _syncInFlight = false;     // 受信同期の実行中（多重実行防止）
+let _syncQueued = false;       // 実行中に、もう1回の受信同期を頼まれた
 let _lastSyncAt = 0;           // 直近の受信同期を始めた時刻
 let _pushAllInFlight = false;  // 全データGAS同期の実行中（連打防止）
 let _renderDeferTimer = null;  // 編集中のため後回しにした再描画の見張り
@@ -415,8 +416,20 @@ function save(key, val) {
     _showStorageError();
     return false;
   }
-  pushPairToCloud(key, val, ts);
+  _sendAfterSave(key, val, ts);
   return true;
+}
+// 保存したあとの送信。
+// 一覧（memos・categories）は、そのまま送らず「受信 → 項目ごとにマージ → 結果を書き戻す」を行う。
+// 一覧を丸ごと新しい時刻で送ると、この端末がまだ受け取っていない他の端末の変更（名前の変更・メモの編集など）を、
+// 古い内容でGASから消してしまう（2026-11-16 実機で発生：PCで名前を戻した直後に、まだ古い名前を表示していた
+// スマホで並べ替えたら、GASの名前が古い方に戻った）。項目ごとの時刻で比べてから送れば、新しい方が残る。
+// ・メンテナンスモード中は受信を止めているので、従来どおりそのまま送る
+// ・通信できないときは何も送られない。端末には保存済みで、次に受信できたときの書き戻しで届く
+function _sendAfterSave(key, val, ts) {
+  if (_importing || !_syncReady()) return;
+  if (SYNC_LISTS.includes(key) && !isMaintenanceMode()) { syncFromCloud(); return; }
+  pushPairToCloud(key, val, ts);
 }
 
 // 一覧の最低ライン：「空でない文字列の id を持つオブジェクト」だけを通す。
@@ -607,15 +620,21 @@ function _listsDiffer(a, b) {
 
 // ── 受信同期の入口 ──
 // 実行中にもう一度呼ばれても重ねて走らせない（起動時・画面に戻ったとき・設定保存時から呼ばれる）
+// 実行中に保存などで呼ばれた分は捨てず、いまの1回が終わったあとにもう1回だけ行う
+// （実行中の受信は、そのあとの保存を知らないまま書き戻すことがあるため）。
 async function syncFromCloud() {
   if (!_syncReady()) return;
-  if (_syncInFlight) return;
+  if (_syncInFlight) { _syncQueued = true; return; }
   _syncInFlight = true;
-  _lastSyncAt = Date.now();
   try {
-    await _syncFromCloudInner();
+    do {
+      _syncQueued = false;
+      _lastSyncAt = Date.now();
+      await _syncFromCloudInner();
+    } while (_syncQueued && _syncReady());
   } finally {
     _syncInFlight = false;
+    _syncQueued = false;
   }
 }
 
@@ -722,6 +741,7 @@ async function _syncFromCloudInner() {
     if (Object.keys(back).length > 0) pushBulkToCloud(back);
     _syncStatus('同期済み');
     setTimeout(() => _syncStatus(''), 3000);
+    _refreshCatModalIfOpen();
     _renderWhenIdle();
   } catch (err) {
     // 通信失敗だけでなく、マージ中の予期しないエラーもここに来る。原因を追えるよう記録する
@@ -1315,6 +1335,13 @@ function showCatModal() {
   _catDelId = null; _catDelTarget = null; _menuOpenId = null;
   renderCatModal();
   document.getElementById('cat-modal').style.display = 'flex';
+  // 開いたときに最新を受け取る（古い名前・並びを見ながら操作しないように。終わったら一覧を描き直す）
+  if (_syncReady() && !isMaintenanceMode() && !_importing && !_pushAllInFlight) syncFromCloud();
+}
+// 「カテゴリの整理」を開いているあいだに同期が終わったら、整理の画面の一覧を最新にする
+function _refreshCatModalIfOpen() {
+  const el = document.getElementById('cat-modal');
+  if (el && el.style.display !== 'none') renderCatModal();
 }
 function closeCatModal() {
   _catDelId = null; _catDelTarget = null;

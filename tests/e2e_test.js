@@ -70,8 +70,8 @@ const boot = async (name, gas, store) => { const a = makeApp(name, gas, store); 
   await act(PC, "formPickCat('lcat_massage'); pickMastery('lma', 2); saveMemo('lma')");
   const full = PC.get('memos').find(m => m.title === '後ろ足の負重');
   t('全項目が保存される（形式Zoom・習熟度2）', !!full && full.category === 'lcat_massage' && full.format === 'Zoom' && full.mastery === 2 && full.next === '回数を増やす');
-  const pair = PC.posts[PC.posts.length - 1];
-  t('保存1回＝送信1回（本体と時刻の組）', pair.bulk === true && eq(Object.keys(pair.data), ['memos', '_ts_memos']) && String(pair.data._ts_memos) === PC.store[LS + 'ts_memos']);
+  const last2 = PC.posts.slice(-2);
+  t('保存1回＝「受信 → マージした一覧の書き戻し」の2回の通信（一覧を丸ごと新しい時刻で上書きしない）', last2[0].action === 'getAll' && last2[1].bulk === true && eq(Object.keys(last2[1].data), ['memos']) && !last2[1].force && eq(ids(gas.all().memos), ids(PC.get('memos'))), last2.map(p => p.action || Object.keys(p.data)));
   t('一覧に内容が出て、習熟度「練習中」が表示される', PC.el('memo-list').innerHTML.includes('後ろ足の負重') && PC.el('memo-list').innerHTML.includes('練習中'));
   await sync(SP);
   t('スマホ役：画面に戻ったときの受信で新しいメモが届く', SP.get('memos').length === 2 && SP.el('memo-list').innerHTML.includes('後ろ足の負重'));
@@ -96,9 +96,9 @@ const boot = async (name, gas, store) => { const a = makeApp(name, gas, store); 
   console.log('6. 2台が互いを知らないまま保存 → どちらのメモも残る');
   PC.el('quick-date').value = '2026-11-10'; await act(PC, "quickPickCat('lcat_praise'); quickSave()");
   SP.el('quick-date').value = '2026-11-11'; await act(SP, "quickPickCat('lcat_massage'); quickSave()");
-  t('あとから保存したスマホ役の一覧でGASが上書きされ、PC役のメモがGASから欠ける（想定どおり）', gas.all().memos.length === 3 && !gas.all().memos.some(m => m.date === '2026-11-10'));
+  t('あとから保存したスマホ役は、PC役のメモを受け取ってから送るので、GASからPC役のメモが欠けない', gas.all().memos.length === 4 && gas.all().memos.some(m => m.date === '2026-11-10') && SP.get('memos').length === 4);
   await sync(PC);
-  t('PC役の次の受信で、欠けたメモが書き戻され、スマホ役のメモも受け取る', gas.all().memos.length === 4 && PC.get('memos').length === 4);
+  t('PC役の次の受信で、スマホ役のメモも受け取る', gas.all().memos.length === 4 && PC.get('memos').length === 4);
   await sync(SP);
   t('スマホ役にも4件そろう', SP.get('memos').length === 4 && eq(ids(SP.get('memos')), ids(PC.get('memos'))));
 
@@ -110,7 +110,7 @@ const boot = async (name, gas, store) => { const a = makeApp(name, gas, store); 
   await act(SP, `openEdit(${JSON.stringify(delId)})`);
   fill(SP, 'lme', { date: '2026-11-10', content: '消されたメモへの書き足し' });
   await act(SP, "saveMemo('lme')");
-  t('（スマホ役の保存で、消したメモがいったんGASに戻る）', gas.all().memos.some(m => m.id === delId));
+  t('スマホ役が消されたメモを知らずに保存しても、GASには戻らず、スマホ役からも消える', !gas.all().memos.some(m => m.id === delId) && !SP.get('memos').some(m => m.id === delId));
   await sync(SP);
   t('スマホ役：次の受信で削除記録が届き、メモが消える', !SP.get('memos').some(m => m.id === delId));
   t('GASからも消える（削除記録を適用した一覧が書き戻される）', !gas.all().memos.some(m => m.id === delId));
@@ -288,7 +288,9 @@ const boot = async (name, gas, store) => { const a = makeApp(name, gas, store); 
   PC.dropResponse = true; PC.expectErrors = true;
   PC.el('quick-date').value = '2026-11-05'; await act(PC, "quickPickCat('lcat_massage'); quickSave()");
   PC.dropResponse = false; PC.expectErrors = false;
-  t('応答が読めなくても、GASには書き込まれている', gas.all().memos.some(m => m.date === '2026-11-05'));
+  t('応答を受け取れなかった保存は、端末には残っている', PC.get('memos').some(m => m.date === '2026-11-05'));
+  await sync(PC);
+  t('次に同期できたときに、GASへ届く', gas.all().memos.some(m => m.date === '2026-11-05'));
 
   console.log('19. カテゴリの名前変更');
   await sync(PC); await sync(SP); await sync(PC);
@@ -388,7 +390,7 @@ const boot = async (name, gas, store) => { const a = makeApp(name, gas, store); 
     await act(PC, `showCatModal(); catDelete(${JSON.stringify(X)}); catDeletePickTarget('lcat_kintore'); catDeleteConfirm(); closeCatModal()`);
     const late = await quick(SP, SP.ev('todayKey()'), X);
     SP.promptAnswer = 'あとから足した'; await act(SP, "addCategory('quick')"); await act(SP, 'quickPickCat(_quickCat)');
-    t('（前提）スマホの古い一覧の保存で、GASに消したカテゴリが一度戻っている', gasCatIds().includes(X));
+    t('スマホが古い一覧のまま保存しても、消したカテゴリはGASに戻らない', !gasCatIds().includes(X) && !catIds(SP).includes(X));
     const total = new Set(PC.get('memos').map(m => m.id).concat(SP.get('memos').map(m => m.id))).size;
     await settleAll(); await settleAll();
     t('消したカテゴリは、どの端末にもGASにも復活しない', !catIds(PC).includes(X) && !catIds(SP).includes(X) && !gasCatIds().includes(X));
@@ -439,6 +441,60 @@ const boot = async (name, gas, store) => { const a = makeApp(name, gas, store); 
     await settleAll();
     t('カテゴリの一覧と並び順が、PC役・スマホ役で一致し、GASとも中身が同じ', eq(catIds(PC), catIds(SP)) && eq(labels(PC), labels(SP)) && eq(catIds(PC).slice().sort(), gasCatIds()) && JSON.stringify(PC.get('categories').slice().sort((a, b) => a.id < b.id ? -1 : 1)) === JSON.stringify(gas.all().categories.slice().sort((a, b) => a.id < b.id ? -1 : 1)));
     t('削除記録（カテゴリ）もGASと一致', eq(PC.get('deleted_ids').categories.slice().sort(), gas.all().deleted_ids.categories.slice().sort()) && eq(SP.get('deleted_ids').categories.slice().sort(), gas.all().deleted_ids.categories.slice().sort()));
+  }
+
+
+  console.log('26. 古い内容を表示している端末での保存（2026-11-16 実機で起きた場面）');
+  {
+    await settleAll();
+    const gLabel = (id) => (gas.all().categories.find(c => c.id === id) || {}).label;
+    const lab = (app, id) => app.ev(`(_catById(${JSON.stringify(id)}) || {}).label`);
+    const K = 'lcat_kintore'; const orig = lab(PC, K);
+    // 名前を変えて元に戻す。スマホは「変えた名前」を受け取ったあと、戻したことを知らないまま並べ替える
+    PC.promptAnswer = '筋トレ2'; await act(PC, `showCatModal(); catRename(${JSON.stringify(K)}); closeCatModal()`);
+    await sync(SP);
+    t('（前提）スマホ役に「筋トレ2」が届いている', lab(SP, K) === '筋トレ2');
+    PC.promptAnswer = orig; await act(PC, `showCatModal(); catRename(${JSON.stringify(K)}); closeCatModal()`);
+    t('（前提）PCで元の名前に戻し、GASも元の名前。スマホ役はまだ「筋トレ2」を表示', gLabel(K) === orig && lab(SP, K) === '筋トレ2');
+    const lastId = catIds(SP).slice(-1)[0];
+    SP.ev(`catMove(${JSON.stringify(lastId)}, -1)`);   // 整理の画面を開かずに操作した場合（開いたときの受信に頼らない確認）
+    await settle(); SP.runTimers(); await settle();
+    t('スマホ役で並べ替えても、GASの名前は古い方に戻らない', gLabel(K) === orig, gLabel(K));
+    t('スマホ役の表示も、その場で元の名前に揃う（PCの再読み込みを待たない）', lab(SP, K) === orig && SP.el('filter-bar').innerHTML.includes('>' + orig + '<') && !SP.el('filter-bar').innerHTML.includes('筋トレ2'));
+    t('スマホ役の並べ替えはGASに入っている', eq(gas.all().categories.slice().sort((a, b) => a.order - b.order).map(c => c.id), catIds(SP)));
+    await sync(PC);
+    t('PC役は1回の受信で、名前はそのまま・並び順はスマホ役と同じになる（書き戻しも不要）', lab(PC, K) === orig && eq(catIds(PC), catIds(SP)) && PC.posts.slice(-1)[0].action === 'getAll');
+    // 名前を変えてすぐ、もう1台で並べ替える（スマホは変更を受け取っていない）
+    PC.promptAnswer = '筋トレ（新）'; await act(PC, `showCatModal(); catRename(${JSON.stringify(K)}); closeCatModal()`);
+    const first = catIds(SP)[0];
+    SP.ev(`catMove(${JSON.stringify(first)}, 1)`); await settle(); SP.runTimers(); await settle();
+    const spOrder = catIds(SP);
+    t('名前を変えてすぐ、もう1台で並べ替えても、名前の変更は消えず、並べ替えも入る', gLabel(K) === '筋トレ（新）' && lab(SP, K) === '筋トレ（新）' && eq(gas.all().categories.slice().sort((a, b) => a.order - b.order).map(c => c.id), spOrder));
+    await sync(PC);
+    t('PC役にも並び順が届き、名前は新しいまま', lab(PC, K) === '筋トレ（新）' && eq(catIds(PC), spOrder));
+    // 整理の画面を開くと、その時点の最新を受け取る
+    PC.promptAnswer = orig; await act(PC, `showCatModal(); catRename(${JSON.stringify(K)}); closeCatModal()`);
+    await act(SP, 'showCatModal()');
+    t('整理の画面を開くと最新を受け取り、開いたままの一覧にも新しい名前が出る', lab(SP, K) === orig && SP.el('cat-list').innerHTML.includes('>' + orig + '<'));
+    SP.ev('closeCatModal()');
+    // 続けて何度も押した場合（1回目の同期の最中に次の保存が入る）
+    const o0 = catIds(SP);
+    SP.ev(`catMove(${JSON.stringify(o0[o0.length - 1])}, -1); catMove(${JSON.stringify(o0[o0.length - 1])}, -1); catMove(${JSON.stringify(o0[0])}, 1)`);
+    await settle(); SP.runTimers(); await settle();
+    t('続けて3回並べ替えても、最後の並びがGASに入る（途中の同期に取りこぼされない）', eq(gas.all().categories.slice().sort((a, b) => a.order - b.order).map(c => c.id), catIds(SP)) && !eq(catIds(SP), o0));
+    // メモでも同じ：PCの編集を知らないスマホが別のメモを保存しても、PCの編集がGASから消えない
+    const target = PC.get('memos')[0];
+    await act(PC, `openEdit(${JSON.stringify(target.id)})`); PC.el('lme-title').value = 'PCで直したタイトル';
+    if (!PC.ev('_editCat')) PC.ev("editPickCat('lcat_kintore')");
+    await act(PC, "saveMemo('lme')");
+    await quick(SP, '2026-07-07', 'lcat_kintore');
+    t('メモも同じ：PCの編集を知らないスマホが別のメモを保存しても、PCの編集はGASに残り、スマホにもその場で届く', gas.all().memos.find(m => m.id === target.id).title === 'PCで直したタイトル' && SP.get('memos').find(m => m.id === target.id).title === 'PCで直したタイトル');
+    // メンテナンスモード中は受信しないので、従来どおりそのまま送る
+    SP.ev('setMaintenanceMode(true)'); SP.posts.length = 0;
+    await quick(SP, '2026-07-08', 'lcat_kintore');
+    t('メンテナンスモード中の保存は、受信せずにそのまま送る（従来どおり）', SP.posts.length === 1 && SP.posts[0].bulk === true && eq(Object.keys(SP.posts[0].data), ['memos', '_ts_memos']));
+    SP.ev('setMaintenanceMode(false)');
+    await settleAll();
   }
 
   await sync(PC); await sync(SP);
