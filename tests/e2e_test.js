@@ -289,6 +289,158 @@ const boot = async (name, gas, store) => { const a = makeApp(name, gas, store); 
   PC.el('quick-date').value = '2026-11-05'; await act(PC, "quickPickCat('lcat_massage'); quickSave()");
   PC.dropResponse = false; PC.expectErrors = false;
   t('応答が読めなくても、GASには書き込まれている', gas.all().memos.some(m => m.date === '2026-11-05'));
+
+  console.log('19. カテゴリの名前変更');
+  await sync(PC); await sync(SP); await sync(PC);
+  const labels = (app) => JSON.parse(app.ev('JSON.stringify(_sortedCategories().map(c => c.label))'));
+  const catIds = (app) => JSON.parse(app.ev('JSON.stringify(_sortedCategories().map(c => c.id))'));
+  const gasCatIds = () => gas.all().categories.map(c => c.id).sort();
+  const memoSnap = (app) => JSON.stringify(app.get('memos').map(m => [m.id, m.category, m._ts]).sort());
+  const settleAll = async () => { await sync(PC); await sync(SP); await sync(PC); await sync(SP); };
+  const quick = async (app, date, cat) => { app.el('quick-date').value = date; await act(app, `quickPickCat(${JSON.stringify(cat)}); quickSave()`); return app.get('memos').slice(-1)[0]; };
+  {
+    const before = memoSnap(PC); const nKin = PC.get('memos').filter(m => m.category === 'lcat_kintore').length;
+    PC.promptAnswer = '  後ろ足トレーニング  '; await act(PC, "showCatModal(); catRename('lcat_kintore')");
+    t('名前が変わり、メモそのものは変わらない（メモはカテゴリの id を持つだけ）', labels(PC).includes('後ろ足トレーニング') && !labels(PC).includes('筋トレ') && memoSnap(PC) === before && nKin > 0);
+    PC.ev('closeCatModal()');
+    t('そのカテゴリのメモ・絞り込み・日付だけ記録が、すべて新しい名前で表示される', PC.el('memo-list').innerHTML.includes('後ろ足トレーニング') && !PC.html().includes('筋トレ</') && PC.el('filter-bar').innerHTML.includes('後ろ足トレーニング') && PC.el('quick-container').innerHTML.includes('後ろ足トレーニング'));
+    await sync(SP);
+    t('名前の変更がスマホ役に伝わる', labels(SP).includes('後ろ足トレーニング') && SP.el('memo-list').innerHTML.includes('後ろ足トレーニング') && memoSnap(SP) === before);
+    PC.toasts.length = 0; PC.promptAnswer = 'マッサージ'; await act(PC, "catRename('lcat_kintore')");
+    PC.promptAnswer = '   '; await act(PC, "catRename('lcat_kintore')");
+    PC.promptAnswer = null; await act(PC, "catRename('lcat_kintore')");
+    t('同じ名前・空の名前・キャンセルでは変わらない', PC.toasts.includes('同じ名前のカテゴリがすでにあります') && PC.toasts.includes('名前を入力してください') && labels(PC).includes('後ろ足トレーニング'));
+  }
+
+  console.log('20. カテゴリの並べ替え');
+  {
+    const before = catIds(PC); const last = before[before.length - 1];
+    PC.posts.length = 0; await act(PC, `catMove(${JSON.stringify(before[0])}, -1)`);
+    t('一番上を「上へ」しても何も起きない（送信もしない）', eq(catIds(PC), before) && PC.posts.length === 0);
+    await act(PC, `catMove(${JSON.stringify(last)}, -1)`); await act(PC, `catMove(${JSON.stringify(last)}, -1)`); await act(PC, `catMove(${JSON.stringify(last)}, -1)`);
+    const want = [last].concat(before.slice(0, -1));
+    t('一番下のカテゴリを一番上まで動かせる', eq(catIds(PC), want), catIds(PC));
+    const pos = (app, id) => labels(app).map(l => app.el(id).innerHTML.indexOf('>' + l + '<'));
+    const asc = (arr) => arr.every((v, i) => v >= 0 && (i === 0 || arr[i - 1] < v));
+    const pe = PC.get('memos').find(m => m.category === 'lcat_kintore');
+    await act(PC, 'toggleForm()');
+    t('日付だけ記録・くわしく書く・絞り込みのチップが、その順番で並ぶ', asc(pos(PC, 'quick-container')) && asc(pos(PC, 'form-container')) && asc(pos(PC, 'filter-bar')), [pos(PC, 'quick-container'), pos(PC, 'form-container'), pos(PC, 'filter-bar')]);
+    await act(PC, 'toggleForm()');
+    const m20a = await quick(PC, PC.ev('todayKey()'), last); const m20b = await quick(PC, PC.ev('todayKey()'), 'lcat_kintore');
+    const sp = labels(PC).map(l => PC.el('summary').innerHTML.indexOf(l + ' <b>')).filter(v => v >= 0);
+    t('今月の学びの表示も、その順番で並ぶ', sp.length >= 2 && asc(sp), sp);
+    await sync(SP);
+    t('並び順がスマホ役に伝わる', eq(catIds(SP), want) && asc(pos(SP, 'filter-bar')));
+    // 別々の端末で、名前の変更と並べ替えを同時に行う（互いを知らないまま）
+    PC.promptAnswer = 'マッサージ（改）'; await act(PC, "catRename('lcat_massage')");
+    await act(SP, "catMove('lcat_massage', 1)");
+    const spOrder = catIds(SP);
+    await settleAll();
+    t('PCの名前変更とスマホの並べ替えが、両方とも残る', labels(PC).includes('マッサージ（改）') && eq(catIds(PC), spOrder) && eq(catIds(SP), spOrder) && eq(labels(PC), labels(SP)), [labels(PC), labels(SP), spOrder]);
+    PC.posts.length = 0; SP.posts.length = 0; await sync(PC); await sync(SP);
+    t('落ち着いたあとは、受信しても書き戻しが出ない', PC.posts.concat(SP.posts).every(p => p.action === 'getAll'));
+  }
+
+  console.log('21. カテゴリの削除（メモが0件）');
+  {
+    SP.promptAnswer = 'いらないカテゴリ'; await act(SP, "addCategory('quick')"); await act(SP, 'quickPickCat(_quickCat)');
+    const junk = SP.get('categories').find(c => c.label === 'いらないカテゴリ').id;
+    await sync(PC);
+    PC.confirmAnswer = false; await act(PC, `showCatModal(); catDelete(${JSON.stringify(junk)})`);
+    t('確認で「いいえ」なら消えない', catIds(PC).includes(junk));
+    PC.confirmAnswer = true; PC.confirms.length = 0; const nMemo = PC.get('memos').length;
+    await act(PC, `setFilter(${JSON.stringify(junk)}); catDelete(${JSON.stringify(junk)})`);
+    t('0件のカテゴリは、確認のあとすぐ消える（メモは1件も変わらない）', !catIds(PC).includes(junk) && PC.confirms.length === 1 && PC.get('memos').length === nMemo && PC.get('deleted_ids').categories.includes(junk));
+    t('消したカテゴリで絞り込み中だったら、絞り込みが外れる', PC.ev('_filterCat') === null);
+    PC.ev('closeCatModal()');
+    await settleAll(); await settleAll();
+    t('削除がスマホ役に伝わり、同期を重ねても復活しない（GASにも無い）', !catIds(SP).includes(junk) && !catIds(PC).includes(junk) && !gasCatIds().includes(junk) && gas.all().deleted_ids.categories.includes(junk));
+  }
+
+  console.log('22. カテゴリの削除（メモがある → 移してから消す）');
+  {
+    const from = 'lcat_massage', to = 'lcat_kintore';
+    await quick(PC, '2026-10-03', from); await sync(SP);
+    const moved = ids(PC.get('memos').filter(m => m.category === from)); const allIds = ids(PC.get('memos'));
+    await act(PC, `showCatModal(); catDelete(${JSON.stringify(from)})`);
+    t('メモのあるカテゴリは、すぐには消えず「◯件のメモがあります。どのカテゴリに移しますか？」と聞く', catIds(PC).includes(from) && PC.el('cat-list').innerHTML.includes('<b>' + moved.length + '件</b> のメモがあります。どのカテゴリに移しますか？') && moved.length > 0);
+    PC.toasts.length = 0; await act(PC, 'catDeleteConfirm()');
+    t('移し先を選ばないと消せない', catIds(PC).includes(from) && PC.toasts.includes('移し先のカテゴリを選んでください') && eq(ids(PC.get('memos').filter(m => m.category === from)), moved));
+    await act(PC, 'catDeleteCancel()');
+    t('「やめる」で元に戻る', catIds(PC).includes(from) && !PC.el('cat-list').innerHTML.includes('どのカテゴリに移しますか'));
+    await act(PC, `catDelete(${JSON.stringify(from)}); catDeletePickTarget(${JSON.stringify(to)}); catDeleteConfirm()`);
+    t('移し先を選ぶと、メモを移してからカテゴリが消える（メモは1件も消えない）', !catIds(PC).includes(from) && eq(ids(PC.get('memos')), allIds) && moved.every(id => PC.get('memos').find(m => m.id === id).category === to) && PC.get('deleted_ids').categories.includes(from), PC.toasts.slice(-1));
+    PC.ev('closeCatModal()');
+    await sync(SP);
+    t('移したメモが、スマホ役にも新しいカテゴリで伝わる', eq(ids(SP.get('memos')), allIds) && moved.every(id => SP.get('memos').find(m => m.id === id).category === to) && !catIds(SP).includes(from));
+    await settleAll();
+    t('同期を重ねても、消したカテゴリは復活せず、メモは移し先のまま（GASも同じ）', !gasCatIds().includes(from) && !catIds(PC).includes(from) && !catIds(SP).includes(from) && moved.every(id => gas.all().memos.find(m => m.id === id).category === to) && eq(ids(gas.all().memos), allIds));
+    t('カテゴリなしのメモは出ていない', PC.ev('_orphanCount()') === 0 && SP.ev('_orphanCount()') === 0 && !PC.el('filter-bar').innerHTML.includes('カテゴリなし'));
+  }
+
+  console.log('23. 片方でカテゴリを消しているあいだに、もう片方でそのカテゴリを使った場合');
+  {
+    PC.promptAnswer = 'お試し'; await act(PC, "addCategory('quick')"); await act(PC, 'quickPickCat(_quickCat)');
+    const X = PC.get('categories').find(c => c.label === 'お試し').id;
+    const mx = await quick(PC, '2026-09-01', X);
+    await settleAll();
+    // PC：X を消してメモを移す。スマホ：それを知らないまま、X にメモを書き、別のカテゴリも足す（古い一覧でGASを上書きする）
+    await act(PC, `showCatModal(); catDelete(${JSON.stringify(X)}); catDeletePickTarget('lcat_kintore'); catDeleteConfirm(); closeCatModal()`);
+    const late = await quick(SP, SP.ev('todayKey()'), X);
+    SP.promptAnswer = 'あとから足した'; await act(SP, "addCategory('quick')"); await act(SP, 'quickPickCat(_quickCat)');
+    t('（前提）スマホの古い一覧の保存で、GASに消したカテゴリが一度戻っている', gasCatIds().includes(X));
+    const total = new Set(PC.get('memos').map(m => m.id).concat(SP.get('memos').map(m => m.id))).size;
+    await settleAll(); await settleAll();
+    t('消したカテゴリは、どの端末にもGASにも復活しない', !catIds(PC).includes(X) && !catIds(SP).includes(X) && !gasCatIds().includes(X));
+    t('メモは1件も消えない（スマホで書いたメモも両方にある）', PC.get('memos').length === total && SP.get('memos').length === total && PC.get('memos').some(m => m.id === late.id) && PC.get('memos').find(m => m.id === mx.id).category === 'lcat_kintore');
+    t('スマホが足したカテゴリは残る', labels(PC).includes('あとから足した') && labels(SP).includes('あとから足した'));
+    for (const app of [PC, SP]) { app.ev('_monthOpen = {}; _filterCat = null; _filterStub = false; renderAll()'); }
+    t('存在しないカテゴリのメモは「カテゴリなし」として一覧に出る（見えなくならない）', [PC, SP].every(app => app.ev('_orphanCount()') === 1 && app.el('memo-list').innerHTML.includes('>カテゴリなし<') && app.el('memo-list').innerHTML.includes('🏷 カテゴリを選ぶ')));
+    t('絞り込みに「カテゴリなし（1）」が出て、今月の学びにも数えられる', [PC, SP].every(app => app.el('filter-bar').innerHTML.includes('カテゴリなし（1）') && app.el('summary').innerHTML.includes('カテゴリなし <b>1</b>回')));
+    await act(PC, 'setFilter(NO_CAT)');
+    t('「カテゴリなし」で絞り込むと、そのメモだけが出る', JSON.parse(PC.ev('JSON.stringify(_filteredMemos().map(m => m.id))')).join() === late.id);
+    PC.toasts.length = 0; await act(PC, `openEdit(${JSON.stringify(late.id)}); saveMemo('lme')`);
+    t('カテゴリなしのメモを開くと、カテゴリは未選択。選ばないと保存できない', PC.toasts.includes('カテゴリを選んでください') && PC.ev('_editCat') === null);
+    await act(PC, "editPickCat('lcat_praise'); saveMemo('lme')");
+    t('カテゴリを選び直して保存すると「カテゴリなし」が消え、絞り込みも外れる', PC.ev('_orphanCount()') === 0 && !PC.el('filter-bar').innerHTML.includes('カテゴリなし') && PC.ev('_filterCat') === null && PC.get('memos').find(m => m.id === late.id).category === 'lcat_praise');
+    await sync(SP);
+    t('選び直したカテゴリがスマホ役に伝わる', SP.get('memos').find(m => m.id === late.id).category === 'lcat_praise' && SP.ev('_orphanCount()') === 0);
+  }
+
+  console.log('24. 2台が、互いのカテゴリを移し先にして同時に消した場合');
+  {
+    PC.promptAnswer = 'カテA'; await act(PC, "addCategory('quick')"); await act(PC, 'quickPickCat(_quickCat)');
+    PC.promptAnswer = 'カテB'; await act(PC, "addCategory('quick')"); await act(PC, 'quickPickCat(_quickCat)');
+    const A = PC.get('categories').find(c => c.label === 'カテA').id, B = PC.get('categories').find(c => c.label === 'カテB').id;
+    const ma = await quick(PC, '2026-08-01', A), mb = await quick(PC, '2026-08-02', B);
+    await settleAll();
+    const total = PC.get('memos').length;
+    await act(PC, `showCatModal(); catDelete(${JSON.stringify(A)}); catDeletePickTarget(${JSON.stringify(B)}); catDeleteConfirm(); closeCatModal()`);
+    await act(SP, `showCatModal(); catDelete(${JSON.stringify(B)}); catDeletePickTarget(${JSON.stringify(A)}); catDeleteConfirm(); closeCatModal()`);
+    await settleAll(); await settleAll();
+    t('両方のカテゴリが消え、メモは1件も消えない（カテゴリなしとして残る）', !catIds(PC).includes(A) && !catIds(PC).includes(B) && eq(catIds(PC), catIds(SP)) && PC.get('memos').length === total && SP.get('memos').length === total && [ma.id, mb.id].every(id => PC.get('memos').some(m => m.id === id) && SP.get('memos').some(m => m.id === id)) && PC.ev('_orphanCount()') === 2 && SP.ev('_orphanCount()') === 2, [PC.ev('_orphanCount()'), SP.ev('_orphanCount()')]);
+    for (const id of [ma.id, mb.id]) await act(PC, `openEdit(${JSON.stringify(id)}); editPickCat('lcat_kintore'); saveMemo('lme')`);
+    await settleAll();
+    t('選び直せば元どおり（両端末とも、カテゴリなしが0件）', PC.ev('_orphanCount()') === 0 && SP.ev('_orphanCount()') === 0);
+  }
+
+  console.log('25. 最後の1つは消せない・整理の画面を開いているあいだは受信しない');
+  {
+    const L = await boot('1台だけ', gas, {});   // 同期を設定していない端末
+    L.confirmAnswer = true;
+    await act(L, "showCatModal(); catDelete('lcat_kintore'); catDelete('lcat_massage')");
+    L.toasts.length = 0; await act(L, "catDelete('lcat_praise')");
+    t('最後の1つのカテゴリは消せない', eq(catIds(L), ['lcat_praise']) && L.toasts.includes('最後の1つのカテゴリは削除できません') && L.el('cat-list').innerHTML.includes('最後の1つのカテゴリは削除できません') && /class="del" disabled/.test(L.el('cat-list').innerHTML));
+    L.ev('closeCatModal()');
+    await act(PC, 'showCatModal()'); PC.posts.length = 0; PC.el('cat-modal').style.display = 'flex';
+    await sync(PC);
+    t('整理の画面を開いているあいだは、受信し直さない（操作の途中で一覧が入れ替わらない）', PC.posts.length === 0);
+    PC.ev('closeCatModal()'); PC.el('cat-modal').style.display = 'none';
+    await settleAll();
+    t('カテゴリの一覧と並び順が、PC役・スマホ役で一致し、GASとも中身が同じ', eq(catIds(PC), catIds(SP)) && eq(labels(PC), labels(SP)) && eq(catIds(PC).slice().sort(), gasCatIds()) && JSON.stringify(PC.get('categories').slice().sort((a, b) => a.id < b.id ? -1 : 1)) === JSON.stringify(gas.all().categories.slice().sort((a, b) => a.id < b.id ? -1 : 1)));
+    t('削除記録（カテゴリ）もGASと一致', eq(PC.get('deleted_ids').categories.slice().sort(), gas.all().deleted_ids.categories.slice().sort()) && eq(SP.get('deleted_ids').categories.slice().sort(), gas.all().deleted_ids.categories.slice().sort()));
+  }
+
   await sync(PC); await sync(SP);
   t('最後に：PC役・スマホ役・GASのメモがすべて一致', eq(ids(PC.get('memos')), ids(SP.get('memos'))) && eq(ids(PC.get('memos')), ids(gas.all().memos)), [PC.get('memos').length, SP.get('memos').length, gas.all().memos.length]);
   t('最後に：削除記録も一致', eq(PC.get('deleted_ids').memos.slice().sort(), gas.all().deleted_ids.memos.slice().sort()) && eq(SP.get('deleted_ids').memos.slice().sort(), gas.all().deleted_ids.memos.slice().sort()));

@@ -100,6 +100,20 @@ button, input, textarea { font-family: inherit; }
 .memo-cat { font-size: 11px; font-weight: 700; color: var(--text); padding: 2px 9px; border-radius: 12px; background: var(--lm-fill, #F0EDE8); }
 .memo-date { font-size: 12px; color: var(--text-light); }
 .stub-badge { font-size: 10.5px; color: var(--text-light); border: 1px dashed #C9C6BE; border-radius: 10px; padding: 1px 8px; }
+.filter-chip.manage-chip { border-style: dashed; color: var(--pink); border-color: var(--pink-light); }
+.filter-chip.none-chip { border-style: dashed; }
+.catm-row { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
+.catm-head { display: flex; align-items: center; gap: 8px; }
+.catm-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+.catm-name { flex: 1; font-size: 14px; font-weight: 700; color: var(--text); word-break: break-all; }
+.catm-count { font-size: 12px; color: var(--text-light); flex-shrink: 0; }
+.catm-btns { display: flex; gap: 6px; margin-top: 8px; }
+.catm-btns button { flex: 1; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 0; font-size: 12.5px; cursor: pointer; color: var(--text); }
+.catm-btns button:disabled { opacity: .35; cursor: default; }
+.catm-btns button.del { color: #c0392b; }
+.catm-move { margin-top: 10px; padding: 10px; background: #FBF6F1; border-radius: 10px; font-size: 13px; line-height: 1.6; color: var(--text); }
+.catm-move .cat-picker { margin: 8px 0; }
+.catm-note { font-size: 12.5px; color: var(--text-light); line-height: 1.6; margin: 4px 0 10px; }
 .stub-add { background: none; border: none; color: var(--pink); font-size: 13px; font-weight: 700; cursor: pointer; padding: 2px 0; }
 .memo-mastery { margin-left: auto; font-size: 10.5px; padding: 2px 9px; border-radius: 10px; font-weight: 700; background: var(--lm-fill, #F0EDE8); color: var(--text); display: inline-flex; align-items: center; gap: 5px; }
 .dots { display: inline-flex; gap: 2px; }
@@ -193,6 +207,11 @@ button, input, textarea { font-family: inherit; }
     <button class="btn-primary" onclick="saveSettingsFromModal()">保存して同期する</button>
 
     <hr class="modal-hr">
+    <div class="modal-h">カテゴリ</div>
+    <div class="modal-sub">カテゴリの名前の変更・並べ替え・削除ができます。</div>
+    <button class="btn-secondary" onclick="closeSettingsModal(); showCatModal()">カテゴリの整理</button>
+
+    <hr class="modal-hr">
     <div class="modal-h">全データGAS同期</div>
     <div class="modal-sub">この端末のデータを、そのまま GAS に送って上書きします。ふだんは押す必要はありません（保存のたびに自動で送られます）。</div>
     <button class="btn-secondary" onclick="pushAllToCloud()">全データGAS同期</button>
@@ -220,6 +239,17 @@ button, input, textarea { font-family: inherit; }
     <div class="modal-title">自動バックアップから戻す</div>
     <div class="modal-sub">メモの内容が変わった日の、最初に開いたときの状態を、新しい順に5つまでこの端末に残しています（読み込みの直前の状態も含みます）。戻すと、メモの内容がバックアップの時点に書き戻ります（そのあとに追加したメモは残ります。削除したメモは戻りません）。</div>
     <div id="backup-list"></div>
+  </div>
+</div>
+
+<!-- カテゴリの整理のモーダル -->
+<div id="cat-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeCatModal()">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="closeCatModal()">×</button>
+    <div class="modal-title">カテゴリの整理</div>
+    <div class="modal-sub">名前の変更・並べ替え・削除ができます。変更は、もう1台の端末にも伝わります。カテゴリを削除しても、メモは消えません（別のカテゴリに移します）。</div>
+    <div id="cat-list"></div>
+    <button class="btn-secondary" onclick="closeCatModal()">閉じる</button>
   </div>
 </div>
 
@@ -259,6 +289,7 @@ const FORMATS = ['Zoom', '対面', '動画', 'その他'];
 const SYNC_LISTS = ['memos', 'categories'];   // GASと同期する一覧（どちらも id 単位でマージする）
 const TEXT_FIELDS = ['title', 'course', 'content', 'reaction', 'next', 'link'];
 const RESYNC_MIN_INTERVAL_MS = 60000;         // 受信し直しの最短間隔
+const NO_CAT = '__none__';                    // 絞り込みの「カテゴリなし」（メモのカテゴリが、もう存在しないもの）
 const BACKUP_KEEP = 5;                        // 端末内に残す自動バックアップの数
 
 // ── 画面の状態 ──
@@ -267,7 +298,9 @@ let _formCat = null, _formFormat = 'Zoom', _formMastery = 1;
 let _editId = null;          // カード内で編集中のメモid
 let _editCat = null, _editFormat = '', _editMastery = 0;
 let _menuOpenId = null;      // ⋯メニューを開いているメモid
-let _filterCat = null;       // 絞り込み中のカテゴリid（null＝すべて）
+let _filterCat = null;       // 絞り込み中のカテゴリid（null＝すべて / NO_CAT＝カテゴリなしのメモ）
+let _catDelId = null;        // 「カテゴリの整理」で、移し先を選んでいる最中の削除対象カテゴリid
+let _catDelTarget = null;    // その移し先
 let _filterStub = false;     // 「日付だけ」の記録だけを表示
 let _monthOpen = {};         // 'YYYY-MM' → 開閉（利用者が操作した月だけ。既定は最新の月だけ開く）
 let _quickCat = null;        // 「日付だけ記録」で選んでいるカテゴリid
@@ -548,7 +581,20 @@ function _mergeList(keyName, localArr, gasArr) {
   const map = new Map(localArr.map(e => [e.id, e]));
   gasArr.forEach(ge => {
     const le = map.get(ge.id);
-    if (!le || Number(ge._ts || 0) >= Number(le._ts || 0)) map.set(ge.id, ge);
+    if (!le) { map.set(ge.id, ge); return; }
+    let win = Number(ge._ts || 0) >= Number(le._ts || 0) ? ge : le;
+    // カテゴリの並び順（order）だけは、並べ替えた時刻（_ot）で別に決める。
+    // 名前の変更（_ts）と並べ替え（_ot）を別々の端末で行っても、両方が残るようにするため。
+    // _ot が同じ（どちらも並べ替えていない等）なら、上で決まった側の並び順のまま
+    if (keyName === 'categories') {
+      const go = Number(ge._ot || 0), lo = Number(le._ot || 0);
+      const o = go === lo ? win : (go > lo ? ge : le);
+      if (o !== win) {
+        win = Object.assign({}, win, { order: o.order });
+        if (o._ot !== undefined) win._ot = o._ot; else delete win._ot;
+      }
+    }
+    map.set(ge.id, win);
   });
   return filterByTombstone(keyName, Array.from(map.values()));
 }
@@ -579,7 +625,7 @@ async function syncFromCloud() {
 function _isUserBusy() {
   if (_importing) return true;
   if (_formOpen || _editId !== null) return true;
-  return ['settings-modal', 'backup-modal'].some(id => {
+  return ['settings-modal', 'backup-modal', 'cat-modal'].some(id => {
     const el = document.getElementById(id);
     return !!el && el.style.display !== 'none';
   });
@@ -969,9 +1015,15 @@ function renderSetupHint() {
 // ============================================================
 // 画面の描画
 // ============================================================
+// 並び順（order）の小さい順。同じ値のときは id 順（どの端末でも同じ並びになるように）
 function _sortedCategories() {
-  return getCategories().slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+  return getCategories().slice().sort((a, b) => ((Number(a.order) || 0) - (Number(b.order) || 0)) || (a.id < b.id ? -1 : (a.id > b.id ? 1 : 0)));
 }
+// カテゴリなしのメモか（メモのカテゴリが、いまのカテゴリ一覧に無い）。
+// 片方の端末でカテゴリを消しているあいだに、もう片方でそのカテゴリのメモを書いたときなどに起きる。
+// メモは消さず、「カテゴリなし」として表示・絞り込みできるようにする
+function _isOrphan(m, catIds) { return !(catIds || new Set(getCategories().map(c => c.id))).has(m.category); }
+function _orphanCount() { const s = new Set(getCategories().map(c => c.id)); return getMemos().filter(m => _isOrphan(m, s)).length; }
 function _catById(id) { return getCategories().find(c => c.id === id) || null; }
 // 「日付だけ」の記録か（文章の項目がどれも空）。一覧で「まだ書き足していない」と分かる表示にする
 function _isStub(m) {
@@ -980,7 +1032,8 @@ function _isStub(m) {
 function _mastery(m) { return Math.min(4, Math.max(0, Math.round(Number(m.mastery)) || 0)); }
 function _filteredMemos() {
   let list = getMemos();
-  if (_filterCat !== null) list = list.filter(m => m.category === _filterCat);
+  if (_filterCat === NO_CAT) { const s = new Set(getCategories().map(c => c.id)); list = list.filter(m => _isOrphan(m, s)); }
+  else if (_filterCat !== null) list = list.filter(m => m.category === _filterCat);
   if (_filterStub) list = list.filter(_isStub);
   return list;
 }
@@ -1001,6 +1054,11 @@ function renderAll(fresh) {
   const p = fresh ? null : _openFormPrefix();
   const keep = (p && document.getElementById(p + '-date')) ? _readFormInputs(p) : null;
   _lastRenderDay = todayKey();
+  // 選択中のカテゴリが（この端末や別の端末の操作で）無くなっていたら、選択を外す
+  if (_filterCat !== null && _filterCat !== NO_CAT && !_catById(_filterCat)) _filterCat = null;
+  if (_filterCat === NO_CAT && _orphanCount() === 0) _filterCat = null;
+  if (_formCat !== null && !_catById(_formCat)) _formCat = null;
+  if (_editCat !== null && !_catById(_editCat)) _editCat = null;
   renderSetupHint();
   renderSummary();
   renderQuick();
@@ -1028,7 +1086,7 @@ function renderSummary() {
     `<span class="spill" style="background:${_safeColor(c.fill, '#F0EDE8')}">${escHtml(c.label)} <b>${counts[c.id]}</b>回</span>`
   );
   const other = Object.keys(counts).filter(id => !known.has(id)).reduce((n, id) => n + counts[id], 0);
-  if (other) pills.push(`<span class="spill" style="background:#F0EDE8">その他 <b>${other}</b>回</span>`);
+  if (other) pills.push(`<span class="spill" style="background:#F0EDE8">カテゴリなし <b>${other}</b>回</span>`);
   document.getElementById('summary').innerHTML = `<div class="summary">
     <div class="stitle">今月の学び（${_monthLabel(curYm)}）${total ? '　合計 ' + total + ' 回' : ''}</div>
     <div class="srow">${pills.join('') || '<span class="sempty">今月はまだ記録がありません</span>'}</div>
@@ -1067,11 +1125,14 @@ function renderForm() {
 
 function renderFilterBar() {
   const stubCount = getMemos().filter(_isStub).length;
+  const noneCount = _orphanCount();
   document.getElementById('filter-bar').innerHTML = `<div class="filter-bar">
     <span class="flabel">絞り込み：</span>
     <button class="filter-chip${_filterCat === null ? ' on' : ''}" onclick="setFilter(null)">すべて</button>
     ${_sortedCategories().map(c => `<button class="filter-chip${_filterCat === c.id ? ' on' : ''}" onclick="setFilter(${_jsq(c.id)})">${escHtml(c.label)}</button>`).join('')}
+    ${noneCount ? `<button class="filter-chip none-chip${_filterCat === NO_CAT ? ' on' : ''}" onclick="setFilter(NO_CAT)">カテゴリなし（${noneCount}）</button>` : ''}
     ${(stubCount || _filterStub) ? `<button class="filter-chip stub-chip${_filterStub ? ' on' : ''}" onclick="toggleStubFilter()">日付だけ（${stubCount}）</button>` : ''}
+    <button class="filter-chip manage-chip" onclick="showCatModal()">カテゴリの整理</button>
   </div>`;
 }
 
@@ -1099,7 +1160,9 @@ function _memoCardHtml(m) {
   const cat = _catById(m.category);
   const fill = _safeColor(cat && cat.fill, '#F0EDE8');
   const solid = _safeColor(cat && cat.solid, '#B4B2A9');
-  const catLabel = cat ? cat.label : 'その他';
+  const catLabel = cat ? cat.label : 'カテゴリなし';
+  // カテゴリなしのメモには、選び直すボタンを出す（編集フォームが開き、カテゴリを選んで保存できる）
+  const pickCat = cat ? '' : `<button class="stub-add" onclick="openEdit(${_jsq(m.id)})">🏷 カテゴリを選ぶ</button>`;
   const style = `--lm-fill:${fill};--lm-solid:${solid}`;
 
   // 編集中はカードの中をフォームに差し替える
@@ -1128,7 +1191,7 @@ function _memoCardHtml(m) {
         <span class="memo-date">${escHtml(_dateLabel(m.date))}</span>
         <span class="stub-badge">日付だけ</span>${masteryHtml}
       </div>
-      <button class="stub-add" onclick="openEdit(${_jsq(m.id)})">＋ 内容を書き足す</button>
+      <button class="stub-add" onclick="openEdit(${_jsq(m.id)})">＋ 内容を書き足す</button>${pickCat ? '<br>' + pickCat : ''}
     </div>`;
   }
 
@@ -1151,7 +1214,7 @@ function _memoCardHtml(m) {
     <div class="memo-top">
       <span class="memo-cat">${escHtml(catLabel)}</span>
       <span class="memo-date">${escHtml(_dateLabel(m.date))}</span>${masteryHtml}
-    </div>${body}</div>`;
+    </div>${body}${pickCat}</div>`;
 }
 
 // フォームの項目（p='lma'＝新規 / 'lme'＝編集。新規のとき m=null）
@@ -1245,6 +1308,126 @@ function addCategory(where) {
   else if (where === 'lma') _formCat = catId;
   else _editCat = catId;
   renderAll();
+}
+
+// ── カテゴリの整理（名前の変更・並べ替え・削除） ──
+function showCatModal() {
+  _catDelId = null; _catDelTarget = null; _menuOpenId = null;
+  renderCatModal();
+  document.getElementById('cat-modal').style.display = 'flex';
+}
+function closeCatModal() {
+  _catDelId = null; _catDelTarget = null;
+  document.getElementById('cat-modal').style.display = 'none';
+  renderAll();
+}
+function _catMemoCounts() {
+  const n = {};
+  getMemos().forEach(m => { n[m.category] = (n[m.category] || 0) + 1; });
+  return n;
+}
+function renderCatModal() {
+  const el = document.getElementById('cat-list');
+  if (!el) return;
+  const cats = _sortedCategories();
+  const counts = _catMemoCounts();
+  if (_catDelId !== null && !_catById(_catDelId)) { _catDelId = null; _catDelTarget = null; }
+  if (_catDelTarget !== null && (!_catById(_catDelTarget) || _catDelTarget === _catDelId)) _catDelTarget = null;
+  const none = _orphanCount();
+  el.innerHTML = cats.map((c, i) => {
+    const n = counts[c.id] || 0;
+    let move = '';
+    if (_catDelId === c.id) {
+      move = `<div class="catm-move">このカテゴリには <b>${n}件</b> のメモがあります。どのカテゴリに移しますか？
+        <div class="cat-picker">${cats.filter(o => o.id !== c.id).map(o => `<button type="button" class="cat-chip${_catDelTarget === o.id ? ' selected' : ''}"${_catDelTarget === o.id ? ` style="background:${_safeColor(o.fill, '#F0EDE8')}"` : ''} onclick="catDeletePickTarget(${_jsq(o.id)})">${escHtml(o.label)}</button>`).join('')}</div>
+        <div class="catm-btns"><button class="del"${_catDelTarget ? '' : ' disabled'} onclick="catDeleteConfirm()">メモを移して削除</button><button onclick="catDeleteCancel()">やめる</button></div>
+      </div>`;
+    }
+    return `<div class="catm-row">
+      <div class="catm-head"><span class="catm-dot" style="background:${_safeColor(c.solid, '#B4B2A9')}"></span><span class="catm-name">${escHtml(c.label)}</span><span class="catm-count">${n}件</span></div>
+      <div class="catm-btns">
+        <button${i === 0 ? ' disabled' : ''} onclick="catMove(${_jsq(c.id)},-1)" aria-label="上へ">▲ 上へ</button>
+        <button${i === cats.length - 1 ? ' disabled' : ''} onclick="catMove(${_jsq(c.id)},1)" aria-label="下へ">▼ 下へ</button>
+        <button onclick="catRename(${_jsq(c.id)})">名前を変更</button>
+        <button class="del"${cats.length <= 1 ? ' disabled' : ''} onclick="catDelete(${_jsq(c.id)})">削除</button>
+      </div>${move}
+    </div>`;
+  }).join('')
+    + (cats.length <= 1 ? '<div class="catm-note">最後の1つのカテゴリは削除できません。</div>' : '')
+    + (none ? `<div class="catm-note">カテゴリなしのメモが ${none}件 あります。一覧の絞り込み「カテゴリなし」から開いて、カテゴリを選び直せます。</div>` : '');
+}
+function catRename(id) {
+  const c = _catById(id);
+  if (!c) { renderCatModal(); return; }
+  const name = prompt('カテゴリの新しい名前を入力してください', c.label);
+  if (name === null) return;
+  const label = name.trim().slice(0, 30);
+  if (!label) { showToast('名前を入力してください'); return; }
+  if (label === c.label) return;
+  const cats = getCategories();
+  if (cats.some(o => o.id !== id && o.label === label)) { showToast('同じ名前のカテゴリがすでにあります'); return; }
+  if (!cats.some(o => o.id === id)) { renderCatModal(); return; }
+  // 名前の変更は _ts（並べ替えは _ot）に時刻を刻む。メモはカテゴリの id を持っているだけなので、
+  // そのカテゴリのメモは、すべて新しい名前で表示される
+  if (!setCategories(cats.map(o => o.id === id ? Object.assign({}, o, { label: label, _ts: Date.now() }) : o))) return;
+  showToast('名前を変更しました');
+  renderCatModal(); renderAll();
+}
+// dir: -1＝上へ / 1＝下へ
+function catMove(id, dir) {
+  const sorted = _sortedCategories();
+  const i = sorted.findIndex(c => c.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= sorted.length) return;
+  const tmp = sorted[i]; sorted[i] = sorted[j]; sorted[j] = tmp;
+  // 並び順を 1,2,3… に振り直し、番号の変わったカテゴリにだけ並べ替えの時刻（_ot）を刻む
+  const now = Date.now();
+  const next = sorted.map((c, k) => (Number(c.order) === k + 1) ? c : Object.assign({}, c, { order: k + 1, _ot: now }));
+  if (!setCategories(next)) return;
+  renderCatModal(); renderAll();
+}
+function catDelete(id) {
+  const c = _catById(id);
+  if (!c) { renderCatModal(); return; }
+  if (getCategories().length <= 1) { showToast('最後の1つのカテゴリは削除できません'); return; }
+  const n = _catMemoCounts()[id] || 0;
+  if (n === 0) {
+    if (!confirm('カテゴリ「' + c.label + '」を削除しますか？（このカテゴリのメモはありません）')) return;
+    _removeCategory(id, null);
+    return;
+  }
+  // メモがあるときは、移し先を選んでもらう（メモは消さない）
+  _catDelId = id; _catDelTarget = null;
+  renderCatModal();
+}
+function catDeletePickTarget(id) { _catDelTarget = id; renderCatModal(); }
+function catDeleteCancel() { _catDelId = null; _catDelTarget = null; renderCatModal(); }
+function catDeleteConfirm() {
+  if (_catDelId === null || _catDelTarget === null) { showToast('移し先のカテゴリを選んでください'); return; }
+  _removeCategory(_catDelId, _catDelTarget);
+}
+// カテゴリを消す。targetId があれば、先にそのカテゴリのメモを移す。
+// 順番が大事：①メモを移す → ②削除記録を残す → ③カテゴリを消す。
+// 途中で止まっても、メモが消えたり、カテゴリなしになったりしない順にしている
+function _removeCategory(id, targetId) {
+  const cats = getCategories();
+  if (!cats.some(c => c.id === id)) { _catDelId = null; _catDelTarget = null; renderCatModal(); return; }
+  if (cats.length <= 1) { showToast('最後の1つのカテゴリは削除できません'); return; }
+  const memos = getMemos();
+  const moving = memos.filter(m => m.category === id).length;
+  if (moving > 0) {
+    if (!targetId || targetId === id || !cats.some(c => c.id === targetId)) { showToast('移し先のカテゴリを選んでください'); return; }
+    // 移したメモに時刻を刻む（別の端末にも、新しいカテゴリが新しい内容として伝わる）
+    const now = Date.now();
+    if (!setMemos(memos.map(m => m.category === id ? Object.assign({}, m, { category: targetId, _ts: now }) : m))) return;
+  }
+  // 削除記録を先に残してから消す（記録が無いと、他の端末やGASから同期で戻ってきてしまう）
+  if (!addDeletedIds('categories', [id])) return;
+  if (!setCategories(getCategories().filter(c => c.id !== id))) return;
+  const target = targetId ? _catById(targetId) : null;
+  _catDelId = null; _catDelTarget = null;
+  showToast(moving > 0 ? moving + '件のメモを「' + (target ? target.label : '') + '」に移して、カテゴリを削除しました' : 'カテゴリを削除しました');
+  renderCatModal(); renderAll();
 }
 
 function saveMemo(p) {
